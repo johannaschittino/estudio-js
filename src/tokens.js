@@ -1,0 +1,17 @@
+export const T = {
+  papel: '#FBF9F4',
+  papel2: '#F4F0E6',
+  tinta: '#1A2E29',
+  tinta60: 'rgba(26,46,41,0.6)',
+  tinta40: 'rgba(26,46,41,0.4)',
+  dorado: '#C9A24B',
+  doradoSoft: 'rgba(201,162,75,0.14)',
+  terracota: '#B5483D',
+  terracotaSoft: 'rgba(181,72,61,0.1)',
+  sage: '#3D6B4F',
+  sageSoft: 'rgba(61,107,79,0.12)',
+  borde: 'rgba(26,46,41,0.12)',
+  serif: "'Source Serif 4', Georgia, serif",
+  sans: "'Inter', -apple-system, sans-serif",
+  mono: "'JetBrains Mono', 'SF Mono', monospace",
+};
