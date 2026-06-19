@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Cada cliente vive en /clientes/{clienteId} y tiene un campo "ownerId"
+    // que debe coincidir con el uid del usuario autenticado.
+    match /clientes/{clienteId} {
+      allow read, update, delete: if request.auth != null
+                                    && resource.data.ownerId == request.auth.uid;
+      allow create: if request.auth != null
+                     && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    // Bloqueo total de cualquier otra colección no contemplada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
