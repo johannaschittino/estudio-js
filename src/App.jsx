@@ -1126,7 +1126,8 @@ function parsearLife(texto) {
   }
 
   const primaTotal = buscarMonto(texto, ['Prima Total']) || buscarMonto(texto, ['\\bPrima\\b(?!\\s*Total)']);
-  const moneda = /moneda\s*:?\s*d[oó]lar/i.test(texto) ? 'USD' : 'ARS';
+  const dicePesos = /moneda\s*:?\s*pesos?/i.test(texto) || /moneda\s*:?\s*ars\b/i.test(texto);
+const moneda = dicePesos ? 'ARS' : 'USD';
 
   return { coberturas, primaMensual: primaTotal ? String(primaTotal) : '', moneda };
 }
