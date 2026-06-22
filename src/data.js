@@ -38,6 +38,13 @@ export const nuevoCliente = () => ({
   // y un monto adicional que se suma a la suma asegurada ideal mientras ese
   // compromiso siga vigente (ej: universidad de un hijo, crédito hipotecario, etc.)
   compromisos: [],
+  // Topes anuales de deducción de Ganancias (se actualizan por AFIP/ARCA cada
+  // período fiscal, por eso quedan editables a mano en vez de hardcodeados).
+  deduccionGanancias: {
+    topeVidaYAhorro: '',   // Seguro de vida con ahorro
+    topeVidaPuro: '',      // Seguro de vida puro (sin ahorro)
+    topeRetiro: '',        // Seguro de retiro
+  },
   notas: '',
   creadoEn: new Date().toISOString(),
   actualizadoEn: new Date().toISOString(),
