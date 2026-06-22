@@ -341,6 +341,11 @@ function FichaCliente({ cliente, onUpdate, onIrAnalisis }) {
   const setTipoCambio = (field, value) => onUpdate({ tipoCambio: { ...cliente.tipoCambio, [field]: value } });
   const setDeduccion = (field, value) => onUpdate({ deduccionGanancias: { ...(cliente.deduccionGanancias || {}), [field]: value } });
 
+  const segurosPrevios = cliente.segurosPrevios || [];
+  const agregarSeguroPrevio = () => onUpdate({ segurosPrevios: [...segurosPrevios, { id: uid(), compania: '', tipo: 'vida', sumaAseguradaUSD: '' }] });
+  const setSeguroPrevio = (id, field, value) => onUpdate({ segurosPrevios: segurosPrevios.map((s) => s.id === id ? { ...s, [field]: value } : s) });
+  const quitarSeguroPrevio = (id) => onUpdate({ segurosPrevios: segurosPrevios.filter((s) => s.id !== id) });
+
   const setConyuge = (field, value) => {
     const base = cliente.conyuge || { nombre: '', edad: '', ocupacion: '' };
     onUpdate({ conyuge: { ...base, [field]: value } });
@@ -574,6 +579,41 @@ function FichaCliente({ cliente, onUpdate, onIrAnalisis }) {
         )}
       </Seccion>
 
+      <Seccion icono="check" titulo="Seguros vigentes (otras compañías)">
+        <p style={{ fontSize: 13, color: T.tinta60, marginTop: -6, marginBottom: 16, lineHeight: 1.5 }}>
+          Coberturas que el cliente ya tiene antes de tu propuesta. Se suman al análisis y se muestran en un color diferente para distinguir qué aportás vos y qué ya tenía.
+        </p>
+        {segurosPrevios.length === 0 && <p style={S.vacioMsg}>Sin seguros previos cargados.</p>}
+        {segurosPrevios.map((s, i) => (
+          <div key={s.id} style={S.hijoCard}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontSize: 12, color: T.tinta40, fontFamily: T.mono }}>SEGURO PREVIO {i + 1}</span>
+              <button style={S.iconBtnGhost} onClick={() => quitarSeguroPrevio(s.id)}><Icon name="trash" size={14} /></button>
+            </div>
+            <Grid cols={3}>
+              <Campo label="Compañía">
+                <input style={S.input} placeholder="Ej: SANCOR, Prudential" value={s.compania} onChange={(e) => setSeguroPrevio(s.id, 'compania', e.target.value)} />
+              </Campo>
+              <Campo label="Tipo de cobertura">
+                <select style={S.input} value={s.tipo} onChange={(e) => setSeguroPrevio(s.id, 'tipo', e.target.value)}>
+                  <option value="vida">Vida / fallecimiento</option>
+                  <option value="itp">Invalidez total y permanente</option>
+                  <option value="enfermedadesCriticas">Enfermedades críticas</option>
+                  <option value="muerteAccidental">Muerte accidental</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </Campo>
+              <Campo label="Suma asegurada (USD)">
+                <input type="number" style={S.input} placeholder="Ej: 50000" value={s.sumaAseguradaUSD} onChange={(e) => setSeguroPrevio(s.id, 'sumaAseguradaUSD', e.target.value)} />
+              </Campo>
+            </Grid>
+          </div>
+        ))}
+        <button style={{ ...S.btnGhostSm, marginTop: 4 }} onClick={agregarSeguroPrevio}>
+          <Icon name="plus" size={13} /> Agregar seguro previo
+        </button>
+      </Seccion>
+
       <Seccion icono="coin" titulo="Deducción de Ganancias">
         <p style={{ fontSize: 13, color: T.tinta60, marginTop: -6, marginBottom: 16, lineHeight: 1.5 }}>
           Los topes anuales de deducción se actualizan por AFIP/ARCA cada período fiscal, así que quedan a tu criterio cargarlos con el valor vigente. Si los completás, el PDF para el cliente va a incluir esta ventaja como parte del análisis.
@@ -670,11 +710,26 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
   const primaTope = numOrNull(cliente.finanzas.primaMaxima) || (ingresoMensualUSD ? ingresoMensualUSD * 0.1 : null);
 
   const totales = sumarCoberturas(cotizacionesDe(cliente));
+
+  // Totales de seguros previos (otras compañías) — se suman al análisis pero
+  // se muestran en color diferente en las barras.
+  const segurosPrevios = cliente.segurosPrevios || [];
+  const totalesPrevios = { vida: 0, itp: 0, enfermedadesCriticas: 0, muerteAccidental: 0 };
+  for (const s of segurosPrevios) {
+    const monto = numOrNull(s.sumaAseguradaUSD) || 0;
+    if (totalesPrevios[s.tipo] !== undefined) totalesPrevios[s.tipo] += monto;
+  }
+  const tienePrevios = segurosPrevios.length > 0 && Object.values(totalesPrevios).some((v) => v > 0);
   const primaMensualTotal = cotizacionesDe(cliente).reduce((acc, c) => acc + (c.primaMensualUSD || 0), 0);
 
-  const pctCobertura = sumaIdealCentro && totales.vida
-    ? Math.min(999, (totales.vida / sumaIdealCentro) * 100)
+  const vidaTotal = totales.vida + totalesPrevios.vida;
+  const itpTotal = totales.itp + totalesPrevios.itp;
+  const pctCobertura = sumaIdealCentro && vidaTotal
+    ? Math.min(999, (vidaTotal / sumaIdealCentro) * 100)
     : (sumaIdealCentro ? 0 : null);
+  const pctCoberturaPropia = sumaIdealCentro && totales.vida
+    ? Math.min(999, (totales.vida / sumaIdealCentro) * 100)
+    : 0;
 
   const pctPrima = primaTope ? (primaMensualTotal / primaTope) * 100 : null;
 
@@ -705,7 +760,7 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
             <button
               style={{ ...S.btnPrimary, opacity: datosListos && cotizacionesDe(cliente).length > 0 ? 1 : 0.5 }}
               disabled={!datosListos || cotizacionesDe(cliente).length === 0 || generandoPDF}
-              onClick={() => generarPDFCliente(cliente, { sumaIdealMin, sumaIdealMax, sumaIdealCentro, primaTope, totales, primaMensualTotal, pctCobertura, pctPrima, ingresoAnualUSD, ingresoMensualUSD, aporteCompromisosCentro, tieneCompromisosRelevantes, primaDiscriminada }, setGenerandoPDF)}
+              onClick={() => generarPDFCliente(cliente, { sumaIdealMin, sumaIdealMax, sumaIdealCentro, primaTope, totales, totalesPrevios, tienePrevios, primaMensualTotal, pctCobertura, pctPrima, ingresoAnualUSD, ingresoMensualUSD, aporteCompromisosCentro, tieneCompromisosRelevantes, primaDiscriminada }, setGenerandoPDF)}
             >
               <Icon name="download" size={16} /> {generandoPDF ? 'Generando…' : 'Descargar PDF'}
             </button>
@@ -752,28 +807,40 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
           </Seccion>
 
           <Seccion icono="check" titulo="Qué cubre la propuesta cargada">
-            <BarraCobertura
+            {tienePrevios && (
+              <div style={{ display: 'flex', gap: 16, marginBottom: 14, fontSize: 11.5, color: T.tinta60 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 12, height: 12, borderRadius: 3, background: T.sage, display: 'inline-block' }} />
+                  Seguros previos (otras compañías)
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 12, height: 12, borderRadius: 3, background: T.dorado, display: 'inline-block' }} />
+                  Tu propuesta
+                </span>
+              </div>
+            )}
+            <BarraApilada
               label="Vida / fallecimiento"
-              valorUSD={totales.vida}
+              valorPropio={totales.vida}
+              valorPrevio={totalesPrevios.vida}
               metaUSD={sumaIdealCentro}
-              pct={pctCobertura}
             />
-            <BarraCobertura
+            <BarraApilada
               label="Invalidez total y permanente"
-              valorUSD={totales.itp}
+              valorPropio={totales.itp}
+              valorPrevio={totalesPrevios.itp}
               metaUSD={sumaIdealCentro}
-              pct={sumaIdealCentro ? Math.min(999, (totales.itp / sumaIdealCentro) * 100) : null}
             />
             <BarraCobertura
               label="Enfermedades críticas"
-              valorUSD={totales.enfermedadesCriticas}
+              valorUSD={totales.enfermedadesCriticas + (totalesPrevios.enfermedadesCriticas || 0)}
               metaUSD={null}
               pct={null}
               sinMeta
             />
             <BarraCobertura
               label="Muerte accidental (adicional)"
-              valorUSD={totales.muerteAccidental}
+              valorUSD={totales.muerteAccidental + (totalesPrevios.muerteAccidental || 0)}
               metaUSD={null}
               pct={null}
               sinMeta
@@ -944,6 +1011,37 @@ function BarraCobertura({ label, valorUSD, metaUSD, pct, sinMeta, esRetiro }) {
       </div>
       <div style={S.barraTrack}>
         <div style={{ ...S.barraFill, width: `${anchoPct}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
+
+// Barra con dos capas: previos (verde sage) + propios (dorado), ambos contra la meta
+function BarraApilada({ label, valorPropio, valorPrevio, metaUSD }) {
+  const total = valorPropio + valorPrevio;
+  const pctTotal = metaUSD ? Math.min(100, (total / metaUSD) * 100) : (total > 0 ? 100 : 0);
+  const pctPrevio = metaUSD ? Math.min(100, (valorPrevio / metaUSD) * 100) : 0;
+  const pctPropio = metaUSD ? Math.min(pctTotal - pctPrevio, 100 - pctPrevio) : (valorPropio > 0 ? 100 : 0);
+  const colorTotal = metaUSD ? (pctTotal >= 100 ? T.sage : pctTotal >= 50 ? T.dorado : T.terracota) : T.dorado;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 13 }}>
+        <span style={{ color: T.tinta }}>{label}</span>
+        <div style={{ textAlign: 'right', fontFamily: T.mono, color: T.tinta60, fontSize: 12 }}>
+          {valorPrevio > 0 && <span style={{ color: T.sage }}>{fmtUSD(valorPrevio)} prev. </span>}
+          {valorPropio > 0 && <span style={{ color: T.dorado }}>+ {fmtUSD(valorPropio)} prop. </span>}
+          {metaUSD && <span>· {fmtPct(pctTotal)} de la meta</span>}
+        </div>
+      </div>
+      <div style={S.barraTrack}>
+        {/* Capa previos (sage) */}
+        {pctPrevio > 0 && (
+          <div style={{ ...S.barraFill, width: `${pctPrevio}%`, background: T.sage, position: 'absolute' }} />
+        )}
+        {/* Capa propios (dorado) — arranca donde termina el previo */}
+        {pctPropio > 0 && (
+          <div style={{ ...S.barraFill, width: `${pctPropio}%`, background: T.dorado, marginLeft: `${pctPrevio}%`, position: 'absolute' }} />
+        )}
       </div>
     </div>
   );
@@ -1498,11 +1596,84 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
       y += 26;
     };
 
-    dibujarBarra('Vida / fallecimiento', calc.totales.vida, calc.sumaIdealCentro, calc.pctCobertura);
-    dibujarBarra('Invalidez total y permanente', calc.totales.itp, calc.sumaIdealCentro, calc.sumaIdealCentro ? (calc.totales.itp / calc.sumaIdealCentro) * 100 : null);
-    if (calc.totales.enfermedadesCriticas > 0) dibujarBarra('Enfermedades críticas', calc.totales.enfermedadesCriticas, null, null);
-    if (calc.totales.muerteAccidental > 0) dibujarBarra('Muerte accidental (adicional)', calc.totales.muerteAccidental, null, null);
+    // Función de barra apilada para el PDF (previos en sage + propios en dorado)
+    const dibujarBarraApilada = (label, valorPropio, valorPrevio, meta) => {
+      const total = valorPropio + valorPrevio;
+      asegurarEspacio(34);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(...colTinta);
+      doc.text(label, M, y);
+      const pctTotal = meta ? Math.min(100, (total / meta) * 100) : (total > 0 ? 100 : 0);
+      let valStr = fmtUSD(total);
+      if (meta) valStr += `  ·  ${fmtPct(pctTotal)} de la meta`;
+      doc.setTextColor(...colGris);
+      doc.text(valStr, W - M, y, { align: 'right' });
+      y += 8;
+      const barW = W - M * 2;
+      doc.setFillColor(...colPapel2);
+      doc.roundedRect(M, y, barW, 7, 3, 3, 'F');
+      // Capa previos (sage)
+      if (valorPrevio > 0) {
+        const pctP = meta ? Math.min(100, (valorPrevio / meta) * 100) : 50;
+        doc.setFillColor(...colSage);
+        doc.roundedRect(M, y, (barW * pctP) / 100, 7, 3, 3, 'F');
+      }
+      // Capa propios (dorado), arranca donde termina el previo
+      if (valorPropio > 0) {
+        const pctPrev = meta ? Math.min(100, (valorPrevio / meta) * 100) : 0;
+        const pctProp = meta ? Math.min(pctTotal - pctPrev, 100 - pctPrev) : (valorPropio > 0 ? 100 : 0);
+        if (pctProp > 0) {
+          doc.setFillColor(...colDorado);
+          doc.roundedRect(M + (barW * pctPrev) / 100, y, (barW * pctProp) / 100, 7, 3, 3, 'F');
+        }
+      }
+      y += 26;
+    };
+
+    dibujarBarraApilada('Vida / fallecimiento', calc.totales.vida, (calc.totalesPrevios?.vida || 0), calc.sumaIdealCentro);
+    dibujarBarraApilada('Invalidez total y permanente', calc.totales.itp, (calc.totalesPrevios?.itp || 0), calc.sumaIdealCentro);
+    if ((calc.totales.enfermedadesCriticas + (calc.totalesPrevios?.enfermedadesCriticas || 0)) > 0)
+      dibujarBarra('Enfermedades críticas', calc.totales.enfermedadesCriticas + (calc.totalesPrevios?.enfermedadesCriticas || 0), null, null);
+    if ((calc.totales.muerteAccidental + (calc.totalesPrevios?.muerteAccidental || 0)) > 0)
+      dibujarBarra('Muerte accidental (adicional)', calc.totales.muerteAccidental + (calc.totalesPrevios?.muerteAccidental || 0), null, null);
     if (calc.totales.fondoRetiro > 0) dibujarBarra('Fondo de retiro proyectado (tasa garantizada)', calc.totales.fondoRetiro, null, null);
+
+    // Leyenda de colores si hay previos
+    if (calc.tienePrevios) {
+      asegurarEspacio(20);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...colSage);
+      doc.text('■ Seguros previos (otras compañías)', M, y);
+      doc.setTextColor(...colDorado);
+      doc.text('■ Tu propuesta', M + 180, y);
+      y += 16;
+    }
+
+    // Seguros previos — mención en texto
+    if (calc.tienePrevios && (cliente.segurosPrevios || []).length > 0) {
+      asegurarEspacio(20 + cliente.segurosPrevios.length * 15);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(...colTinta);
+      doc.text('Seguros vigentes de otras compañías', M, y);
+      y += 14;
+      (cliente.segurosPrevios || []).forEach((s) => {
+        const monto = numOrNull(s.sumaAseguradaUSD);
+        if (!monto) return;
+        asegurarEspacio(15);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9.5);
+        doc.setTextColor(...colGris);
+        const tipoLabel = { vida: 'Vida', itp: 'ITP', enfermedadesCriticas: 'Enf. críticas', muerteAccidental: 'Muerte accidental', otro: 'Otro' }[s.tipo] || s.tipo;
+        doc.text(`${s.compania || 'Compañía no especificada'} — ${tipoLabel}`, M + 8, y);
+        doc.setTextColor(...colSage);
+        doc.text(fmtUSD(monto), W - M, y, { align: 'right' });
+        y += 15;
+      });
+      y += 8;
+    }
 
     // Salud en pesos — sección separada, no barra en USD
     if (calc.totales.tieneSalud) {
@@ -1752,7 +1923,7 @@ const S = {
   compromisosNota: { display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 16, padding: '10px 14px', background: T.doradoSoft, borderRadius: 9, fontSize: 12.5, color: T.tinta, lineHeight: 1.5 },
   compromisoRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${T.borde}` },
 
-  barraTrack: { height: 9, background: T.papel2, borderRadius: 5, overflow: 'hidden' },
+  barraTrack: { height: 9, background: T.papel2, borderRadius: 5, overflow: 'hidden', position: 'relative' },
   barraFill: { height: '100%', borderRadius: 5, transition: 'width 0.3s' },
 
   divider: { height: 1, background: T.borde, margin: '20px 0' },
