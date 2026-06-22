@@ -788,14 +788,19 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
                 esRetiro
               />
             )}
-            {totales.salud > 0 && (
-              <BarraCobertura
-                label="Cobertura de salud"
-                valorUSD={totales.salud}
-                metaUSD={null}
-                pct={null}
-                sinMeta
-              />
+            {totales.tieneSalud && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 13 }}>
+                  <span>Cobertura de salud</span>
+                  <span style={{ fontFamily: T.mono, color: T.tinta60, fontSize: 12 }}>sumas en pesos</span>
+                </div>
+                {totales.modulosSalud.map((m, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '3px 0', borderBottom: `1px solid ${T.borde}` }}>
+                    <span style={{ color: T.tinta60 }}>{m.nombre}</span>
+                    <span style={{ fontFamily: T.mono }}>${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(m.monto)}</span>
+                  </div>
+                ))}
+              </div>
             )}
 
             {/* Detalle del plan de retiro con doble tasa */}
@@ -910,13 +915,20 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
 const cotizacionesDe = (cliente) => cliente.cotizaciones || [];
 
 function sumarCoberturas(cotizaciones) {
-  const acc = { vida: 0, itp: 0, enfermedadesCriticas: 0, muerteAccidental: 0, fondoRetiro: 0, salud: 0 };
+  const acc = { vida: 0, itp: 0, enfermedadesCriticas: 0, muerteAccidental: 0, fondoRetiro: 0 };
+  let saludARS = 0; // salud siempre en pesos originales
+  const modulosSalud = []; // lista de módulos de salud para mostrar en el PDF
   for (const c of cotizaciones) {
     for (const cob of c.coberturas || []) {
-      if (acc[cob.tipo] !== undefined) acc[cob.tipo] += cob.beneficioUSD || 0;
+      if (cob.tipo === 'salud') {
+        saludARS += cob.beneficioOriginal || numOrNull(cob.beneficio) || 0;
+        modulosSalud.push({ nombre: cob.nombre, monto: cob.beneficioOriginal || numOrNull(cob.beneficio) || 0 });
+      } else if (acc[cob.tipo] !== undefined) {
+        acc[cob.tipo] += cob.beneficioUSD || 0;
+      }
     }
   }
-  return acc;
+  return { ...acc, saludARS, modulosSalud, tieneSalud: modulosSalud.length > 0 };
 }
 
 function BarraCobertura({ label, valorUSD, metaUSD, pct, sinMeta, esRetiro }) {
@@ -987,7 +999,15 @@ function ModalCargaCotizacion({ tcNum, onCerrar, onConfirmar }) {
     const primaUSD = moneda === 'USD' ? primaNum : (tcNum ? primaNum / tcNum : 0);
     const coberturasConvertidas = coberturas.map((c) => ({
       ...c,
-      beneficioUSD: moneda === 'USD' ? numOrNull(c.beneficio) || 0 : (tcNum ? (numOrNull(c.beneficio) || 0) / tcNum : 0),
+      beneficioOriginal: numOrNull(c.beneficio) || 0,
+      monedaOriginal: moneda,
+      // Salud no entra en el cálculo de suma asegurada en USD —
+      // sus sumas aseguradas son en pesos con ajuste por coeficiente.
+      beneficioUSD: c.tipo === 'salud'
+        ? 0
+        : moneda === 'USD'
+          ? numOrNull(c.beneficio) || 0
+          : (tcNum ? (numOrNull(c.beneficio) || 0) / tcNum : 0),
     }));
     onConfirmar({
       id: uid(),
@@ -1317,7 +1337,7 @@ function calcularFaltantes(totales, finanzas) {
       texto: 'Hoy estás construyendo tu presente — sumar un plan de retiro es la forma de empezar a construir, también desde ahora, los años en los que vas a querer vivir con la misma tranquilidad sin depender de seguir trabajando.',
     });
   }
-  if ((!totales.salud || totales.salud === 0) && (!finanzas?.otrosSeguros || !finanzas.otrosSeguros.trim())) {
+  if (!totales.tieneSalud && (!finanzas?.otrosSeguros || !finanzas.otrosSeguros.trim())) {
     faltantes.push({
       titulo: 'Cobertura de salud',
       texto: 'Una cobertura de salud complementaria es otra capa de tranquilidad que vale la pena conversar más adelante, cuando el perfil y las prioridades lo permitan.',
@@ -1483,7 +1503,30 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     if (calc.totales.enfermedadesCriticas > 0) dibujarBarra('Enfermedades críticas', calc.totales.enfermedadesCriticas, null, null);
     if (calc.totales.muerteAccidental > 0) dibujarBarra('Muerte accidental (adicional)', calc.totales.muerteAccidental, null, null);
     if (calc.totales.fondoRetiro > 0) dibujarBarra('Fondo de retiro proyectado (tasa garantizada)', calc.totales.fondoRetiro, null, null);
-    if (calc.totales.salud > 0) dibujarBarra('Cobertura de salud', calc.totales.salud, null, null);
+
+    // Salud en pesos — sección separada, no barra en USD
+    if (calc.totales.tieneSalud) {
+      asegurarEspacio(20 + calc.totales.modulosSalud.length * 16);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(...colTinta);
+      doc.text('Cobertura de salud', M, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...colGris);
+      doc.text('sumas aseguradas en pesos', W - M, y, { align: 'right' });
+      y += 14;
+      calc.totales.modulosSalud.forEach((mod) => {
+        asegurarEspacio(16);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9.5);
+        doc.setTextColor(...colGris);
+        doc.text(mod.nombre, M + 8, y);
+        doc.setTextColor(...colTinta);
+        doc.text(`$${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(mod.monto)}`, W - M, y, { align: 'right' });
+        y += 15;
+      });
+    }
     y += 8;
 
     // ---------- Detalle plan de retiro ----------
