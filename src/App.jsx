@@ -647,6 +647,7 @@ function calcularAporteCompromisos(compromisos, horizonteAnios) {
 function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
   const [mostrarCarga, setMostrarCarga] = useState(false);
   const [generandoPDF, setGenerandoPDF] = useState(false);
+  const [primaDiscriminada, setPrimaDiscriminada] = useState(false);
 
   const ingresoNum = numOrNull(cliente.finanzas.ingresoMensual);
   const tcNum = numOrNull(cliente.tipoCambio.valor);
@@ -698,15 +699,21 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
             {cliente.ocupacion || 'Sin ocupación cargada'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button style={S.btnGhostSm} onClick={onVolverFicha}><Icon name="edit" size={14} /> Editar ficha</button>
-          <button
-            style={{ ...S.btnPrimary, opacity: datosListos && cotizacionesDe(cliente).length > 0 ? 1 : 0.5 }}
-            disabled={!datosListos || cotizacionesDe(cliente).length === 0 || generandoPDF}
-            onClick={() => generarPDFCliente(cliente, { sumaIdealMin, sumaIdealMax, sumaIdealCentro, primaTope, totales, primaMensualTotal, pctCobertura, pctPrima, ingresoAnualUSD, ingresoMensualUSD, aporteCompromisosCentro, tieneCompromisosRelevantes }, setGenerandoPDF)}
-          >
-            <Icon name="download" size={16} /> {generandoPDF ? 'Generando…' : 'Descargar PDF'}
-          </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button style={S.btnGhostSm} onClick={onVolverFicha}><Icon name="edit" size={14} /> Editar ficha</button>
+            <button
+              style={{ ...S.btnPrimary, opacity: datosListos && cotizacionesDe(cliente).length > 0 ? 1 : 0.5 }}
+              disabled={!datosListos || cotizacionesDe(cliente).length === 0 || generandoPDF}
+              onClick={() => generarPDFCliente(cliente, { sumaIdealMin, sumaIdealMax, sumaIdealCentro, primaTope, totales, primaMensualTotal, pctCobertura, pctPrima, ingresoAnualUSD, ingresoMensualUSD, aporteCompromisosCentro, tieneCompromisosRelevantes, primaDiscriminada }, setGenerandoPDF)}
+            >
+              <Icon name="download" size={16} /> {generandoPDF ? 'Generando…' : 'Descargar PDF'}
+            </button>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.tinta60, cursor: 'pointer' }}>
+            <input type="checkbox" checked={primaDiscriminada} onChange={(e) => setPrimaDiscriminada(e.target.checked)} />
+            Mostrar prima discriminada por producto en el PDF
+          </label>
         </div>
       </div>
 
@@ -781,6 +788,58 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
                 esRetiro
               />
             )}
+            {totales.salud > 0 && (
+              <BarraCobertura
+                label="Cobertura de salud"
+                valorUSD={totales.salud}
+                metaUSD={null}
+                pct={null}
+                sinMeta
+              />
+            )}
+
+            {/* Detalle del plan de retiro con doble tasa */}
+            {cotizacionesDe(cliente).some((c) => c.fuente === 'origenes') && (() => {
+              const cotRetiro = cotizacionesDe(cliente).find((c) => c.fuente === 'origenes');
+              const cobRetiro = cotRetiro?.coberturas?.find((c) => c.tipo === 'fondoRetiro' && c.extra);
+              if (!cobRetiro?.extra) return null;
+              const ex = cobRetiro.extra;
+              return (
+                <div style={{ background: T.papel2, borderRadius: 9, padding: '12px 14px', marginTop: 8, marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: T.tinta60, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>Detalle plan de retiro</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: T.tinta40 }}>Tasa garantizada (1%)</div>
+                      <div style={{ fontFamily: T.mono, fontSize: 13 }}>{fmtUSD(cotRetiro.primaMensualUSD !== undefined ? numOrNull(cobRetiro.beneficio) : null) || fmtUSD(numOrNull(cobRetiro.beneficio))}</div>
+                    </div>
+                    {ex.fondoProyectado && (
+                      <div>
+                        <div style={{ fontSize: 11, color: T.tinta40 }}>Tasa proyectada (6%)</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 13 }}>{fmtUSD(ex.fondoProyectado)}</div>
+                      </div>
+                    )}
+                    {ex.rentaGarantizada && (
+                      <div>
+                        <div style={{ fontSize: 11, color: T.tinta40 }}>Renta mensual garantizada</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 13 }}>{fmtUSD(ex.rentaGarantizada)}/mes</div>
+                      </div>
+                    )}
+                    {ex.rentaProyectada && (
+                      <div>
+                        <div style={{ fontSize: 11, color: T.tinta40 }}>Renta mensual proyectada</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 13 }}>{fmtUSD(ex.rentaProyectada)}/mes</div>
+                      </div>
+                    )}
+                    {ex.edadRetiro && (
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <div style={{ fontSize: 11, color: T.tinta40 }}>Edad de retiro</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 13 }}>{ex.edadRetiro} años</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div style={S.divider} />
 
@@ -851,7 +910,7 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
 const cotizacionesDe = (cliente) => cliente.cotizaciones || [];
 
 function sumarCoberturas(cotizaciones) {
-  const acc = { vida: 0, itp: 0, enfermedadesCriticas: 0, muerteAccidental: 0, fondoRetiro: 0 };
+  const acc = { vida: 0, itp: 0, enfermedadesCriticas: 0, muerteAccidental: 0, fondoRetiro: 0, salud: 0 };
   for (const c of cotizaciones) {
     for (const cob of c.coberturas || []) {
       if (acc[cob.tipo] !== undefined) acc[cob.tipo] += cob.beneficioUSD || 0;
@@ -1018,6 +1077,7 @@ function ModalCargaCotizacion({ tcNum, onCerrar, onConfirmar }) {
                     <option value="enfermedadesCriticas">Enf. críticas</option>
                     <option value="muerteAccidental">Muerte accidental</option>
                     <option value="fondoRetiro">Fondo de retiro</option>
+                    <option value="salud">Salud</option>
                     <option value="otro">Otro</option>
                   </select>
                   <button style={S.iconBtnGhost} onClick={() => quitarCobertura(i)}><Icon name="trash" size={14} /></button>
@@ -1152,16 +1212,23 @@ function parsearLife(texto) {
     }
   }
 
+  // Módulos de salud: detecta cualquier línea "Salud - [nombre]  $monto"
+  const regexSalud = /Salud\s*[-–]\s*([^\n$\d]{3,40?})\s+\$?\s*([\d.,]+)/gi;
+  let matchSalud;
+  while ((matchSalud = regexSalud.exec(texto)) !== null) {
+    const nombre = matchSalud[1].trim();
+    const monto = numDesdeTexto(matchSalud[2]);
+    if (monto && monto > 0) {
+      coberturas.push({ nombre: `Salud - ${nombre}`, beneficio: String(monto), tipo: 'salud' });
+    }
+  }
+
   if (!coberturas.some((c) => c.tipo === 'vida')) {
     const totalBeneficio = buscarMonto(texto, ['Total Beneficio[^\\d]*']);
     if (totalBeneficio) coberturas.push({ nombre: 'Total Beneficio', beneficio: String(totalBeneficio), tipo: 'vida' });
   }
 
   const primaTotal = buscarMonto(texto, ['Prima Total']) || buscarMonto(texto, ['\\bPrima\\b(?!\\s*Total)']);
-  // Los productos de Life Seguros están dolarizados por definición (cotizan al
-  // tipo de cambio oficial mayorista). Solo se marca ARS si el texto lo dice
-  // explícitamente — de lo contrario, USD es el default correcto para esta
-  // plantilla, evitando una doble conversión accidental.
   const dicePesos = /moneda\s*:?\s*pesos?/i.test(texto) || /moneda\s*:?\s*ars\b/i.test(texto);
   const moneda = dicePesos ? 'ARS' : 'USD';
 
@@ -1170,11 +1237,42 @@ function parsearLife(texto) {
 
 function parsearOrigenes(texto) {
   const coberturas = [];
-  const matchFondo = texto.match(/Fondo Acumulado[:\s]*u?\$?s?\s*([\d.,]+)/i);
-  const fondo = matchFondo ? numDesdeTexto(matchFondo[1]) : null;
 
-  if (fondo) {
-    coberturas.push({ nombre: 'Fondo Acumulado (proyección garantizada)', beneficio: String(fondo), tipo: 'fondoRetiro' });
+  // Capturar fondo garantizado (primera columna) y proyectado (segunda columna)
+  // Formato: "Fondo Acumulado:   u$s 19.879,57   u$s 44.486,96"
+  const matchFondos = texto.match(/Fondo Acumulado[:\s]*u?\$?s?\s*([\d.,]+)[^\d]*([\d.,]+)/i);
+  const fondoGarantizado = matchFondos ? numDesdeTexto(matchFondos[1]) : null;
+  const fondoProyectado = matchFondos ? numDesdeTexto(matchFondos[2]) : null;
+
+  // También capturar renta mensual garantizada y proyectada
+  const matchRenta = texto.match(/Renta Mensual[:\s]*u?\$?s?\s*([\d.,]+)[^\d]*([\d.,]+)/i);
+  const rentaGarantizada = matchRenta ? numDesdeTexto(matchRenta[1]) : null;
+  const rentaProyectada = matchRenta ? numDesdeTexto(matchRenta[2]) : null;
+
+  // Edad de retiro y aporte mensual
+  const matchEdadRetiro = texto.match(/Edad\s+Retiro[:\s]*(\d+)/i);
+  const edadRetiro = matchEdadRetiro ? parseInt(matchEdadRetiro[1]) : null;
+  const matchFechaNac = texto.match(/Fecha\s+Nacimiento[^:]*:\s*(\d{2}\/\d{2}\/\d{4}|\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})/i);
+
+  if (fondoGarantizado) {
+    coberturas.push({
+      nombre: 'Fondo de retiro — tasa garantizada (1%)',
+      beneficio: String(fondoGarantizado),
+      tipo: 'fondoRetiro',
+      extra: {
+        fondoProyectado: fondoProyectado || null,
+        rentaGarantizada: rentaGarantizada || null,
+        rentaProyectada: rentaProyectada || null,
+        edadRetiro: edadRetiro || null,
+        tasaGarantizada: 1,
+        tasaProyectada: 6,
+      }
+    });
+  } else {
+    // Fallback al regex original si no captura la doble columna
+    const matchFondo = texto.match(/Fondo Acumulado[:\s]*u?\$?s?\s*([\d.,]+)/i);
+    const fondo = matchFondo ? numDesdeTexto(matchFondo[1]) : null;
+    if (fondo) coberturas.push({ nombre: 'Fondo Acumulado (proyección garantizada)', beneficio: String(fondo), tipo: 'fondoRetiro' });
   }
 
   const aporteMensual = buscarMonto(texto, ['Aporte Mensual']);
@@ -1219,7 +1317,7 @@ function calcularFaltantes(totales, finanzas) {
       texto: 'Hoy estás construyendo tu presente — sumar un plan de retiro es la forma de empezar a construir, también desde ahora, los años en los que vas a querer vivir con la misma tranquilidad sin depender de seguir trabajando.',
     });
   }
-  if (!finanzas?.otrosSeguros || !finanzas.otrosSeguros.trim()) {
+  if ((!totales.salud || totales.salud === 0) && (!finanzas?.otrosSeguros || !finanzas.otrosSeguros.trim())) {
     faltantes.push({
       titulo: 'Cobertura de salud',
       texto: 'Una cobertura de salud complementaria es otra capa de tranquilidad que vale la pena conversar más adelante, cuando el perfil y las prioridades lo permitan.',
@@ -1261,6 +1359,7 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     const colTerracota = [181, 72, 61];
     const colGris = [120, 120, 110];
     const colPapel2 = [244, 240, 230];
+    const colBorde = [200, 196, 186];
 
     const edad = calcEdad(cliente.fechaNacimiento);
     const nombrePila = (cliente.nombreCompleto || 'tu cliente').split(' ')[0];
@@ -1383,12 +1482,67 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     dibujarBarra('Invalidez total y permanente', calc.totales.itp, calc.sumaIdealCentro, calc.sumaIdealCentro ? (calc.totales.itp / calc.sumaIdealCentro) * 100 : null);
     if (calc.totales.enfermedadesCriticas > 0) dibujarBarra('Enfermedades críticas', calc.totales.enfermedadesCriticas, null, null);
     if (calc.totales.muerteAccidental > 0) dibujarBarra('Muerte accidental (adicional)', calc.totales.muerteAccidental, null, null);
-    if (calc.totales.fondoRetiro > 0) dibujarBarra('Fondo de retiro proyectado', calc.totales.fondoRetiro, null, null);
+    if (calc.totales.fondoRetiro > 0) dibujarBarra('Fondo de retiro proyectado (tasa garantizada)', calc.totales.fondoRetiro, null, null);
+    if (calc.totales.salud > 0) dibujarBarra('Cobertura de salud', calc.totales.salud, null, null);
     y += 8;
+
+    // ---------- Detalle plan de retiro ----------
+    const cotRetiro = (cliente.cotizaciones || []).find((c) => c.fuente === 'origenes');
+    const cobRetiro = cotRetiro?.coberturas?.find((c) => c.tipo === 'fondoRetiro' && c.extra);
+    if (cobRetiro?.extra) {
+      const ex = cobRetiro.extra;
+      asegurarEspacio(90);
+      doc.setFillColor(...colPapel2);
+      doc.roundedRect(M, y, W - M * 2, 76, 6, 6, 'F');
+      y += 14;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(...colTinta);
+      doc.text('Plan de retiro — detalle de proyecciones', M + 10, y);
+      y += 16;
+      const cols = [];
+      cols.push(['Fondo acumulado (1% garantizado)', fmtUSD(numOrNull(cobRetiro.beneficio))]);
+      if (ex.fondoProyectado) cols.push(['Fondo acumulado (6% proyectado)', fmtUSD(ex.fondoProyectado)]);
+      if (ex.rentaGarantizada) cols.push(['Renta mensual garantizada', fmtUSD(ex.rentaGarantizada) + '/mes']);
+      if (ex.rentaProyectada) cols.push(['Renta mensual proyectada (6%)', fmtUSD(ex.rentaProyectada) + '/mes']);
+      if (ex.edadRetiro) cols.push(['Edad de retiro', `${ex.edadRetiro} años`]);
+      const colW = (W - M * 2 - 20) / 2;
+      cols.forEach(([k, v], idx) => {
+        const cx = M + 10 + (idx % 2) * colW;
+        if (idx % 2 === 0 && idx > 0) y += 16;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(...colGris);
+        doc.text(k, cx, y);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(...colTinta);
+        doc.text(v, cx, y + 11);
+      });
+      y += 28;
+    }
 
     // ---------- Prima mensual ----------
     encabezadoSeccion('Tu inversión mensual');
     parrafo(`Tope recomendado: hasta el 10% de tu ingreso mensual, equivalente a ${fmtUSD(calc.primaTope)}.`, { color: colGris, size: 10, marginBottom: 6 });
+
+    if (calc.primaDiscriminada && (cliente.cotizaciones || []).length > 1) {
+      // Mostrar desglose por producto
+      (cliente.cotizaciones || []).forEach((cot) => {
+        asegurarEspacio(17);
+        const nombreProd = cot.fuente === 'life' ? 'Life Seguros — seguro de vida' : cot.fuente === 'origenes' ? 'Orígenes — plan de retiro' : (cot.archivoNombre || 'Otro producto');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(...colTinta);
+        doc.text(nombreProd, M, y);
+        doc.setTextColor(...colGris);
+        doc.text(fmtUSD(cot.primaMensualUSD) + '/mes', W - M, y, { align: 'right' });
+        y += 17;
+      });
+      asegurarEspacio(26);
+      doc.setDrawColor(...colBorde);
+      doc.line(M, y - 4, W - M, y - 4);
+    }
     asegurarEspacio(26);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
