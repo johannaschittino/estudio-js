@@ -32,7 +32,17 @@ const fmtPct = (n) => {
 
 const numOrNull = (v) => {
   if (v === '' || v === null || v === undefined) return null;
-  const n = Number(String(v).replace(/\./g, '').replace(',', '.'));
+  const s = String(v).trim();
+  // Si ya es un número JS válido en formato estándar (punto decimal, sin
+  // separador de miles) lo usamos directo — esto cubre los valores que
+  // vienen del parser de cotizaciones, generados con String(numero).
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    const directo = Number(s);
+    if (!isNaN(directo)) return directo;
+  }
+  // Si no, asumimos formato argentino tipeado a mano: punto de miles,
+  // coma decimal (ej: "1.234,56").
+  const n = Number(s.replace(/\./g, '').replace(',', '.'));
   return isNaN(n) ? null : n;
 };
 
@@ -329,6 +339,7 @@ function FichaCliente({ cliente, onUpdate, onIrAnalisis }) {
   const set = (field, value) => onUpdate({ [field]: value });
   const setFinanzas = (field, value) => onUpdate({ finanzas: { ...cliente.finanzas, [field]: value } });
   const setTipoCambio = (field, value) => onUpdate({ tipoCambio: { ...cliente.tipoCambio, [field]: value } });
+  const setDeduccion = (field, value) => onUpdate({ deduccionGanancias: { ...(cliente.deduccionGanancias || {}), [field]: value } });
 
   const setConyuge = (field, value) => {
     const base = cliente.conyuge || { nombre: '', edad: '', ocupacion: '' };
@@ -561,6 +572,23 @@ function FichaCliente({ cliente, onUpdate, onIrAnalisis }) {
             <Icon name="alert" size={13} /> Cargá el tipo de cambio para poder dolarizar el ingreso y comparar contra las cotizaciones.
           </p>
         )}
+      </Seccion>
+
+      <Seccion icono="coin" titulo="Deducción de Ganancias">
+        <p style={{ fontSize: 13, color: T.tinta60, marginTop: -6, marginBottom: 16, lineHeight: 1.5 }}>
+          Los topes anuales de deducción se actualizan por AFIP/ARCA cada período fiscal, así que quedan a tu criterio cargarlos con el valor vigente. Si los completás, el PDF para el cliente va a incluir esta ventaja como parte del análisis.
+        </p>
+        <Grid cols={3}>
+          <Campo label="Tope anual — Vida con ahorro (ARS)">
+            <input type="number" style={S.input} placeholder="Ej: 1500000" value={cliente.deduccionGanancias?.topeVidaYAhorro || ''} onChange={(e) => setDeduccion('topeVidaYAhorro', e.target.value)} />
+          </Campo>
+          <Campo label="Tope anual — Vida puro (ARS)">
+            <input type="number" style={S.input} placeholder="Ej: 1500000" value={cliente.deduccionGanancias?.topeVidaPuro || ''} onChange={(e) => setDeduccion('topeVidaPuro', e.target.value)} />
+          </Campo>
+          <Campo label="Tope anual — Retiro (ARS)">
+            <input type="number" style={S.input} placeholder="Ej: 1500000" value={cliente.deduccionGanancias?.topeRetiro || ''} onChange={(e) => setDeduccion('topeRetiro', e.target.value)} />
+          </Campo>
+        </Grid>
       </Seccion>
 
       <Seccion icono="edit" titulo="Notas">
@@ -970,9 +998,13 @@ function ModalCargaCotizacion({ tcNum, onCerrar, onConfirmar }) {
                 </select>
               </Campo>
               <Campo label="Prima mensual">
-                <input type="number" style={S.input} value={primaMensual} onChange={(e) => setPrimaMensual(e.target.value)} />
+                <input type="text" inputMode="decimal" style={S.input} value={primaMensual} onChange={(e) => setPrimaMensual(e.target.value)} />
               </Campo>
             </Grid>
+
+            <div style={{ fontSize: 11.5, color: T.tinta40, marginTop: -10, marginBottom: 14 }}>
+              Se va a guardar como: <strong>{fmtUSD(moneda === 'USD' ? numOrNull(primaMensual) : (tcNum ? (numOrNull(primaMensual) || 0) / tcNum : null))}</strong> al confirmar.
+            </div>
 
             <div style={{ marginTop: 16 }}>
               <span style={S.subTitulo}>Coberturas</span>
@@ -1126,8 +1158,12 @@ function parsearLife(texto) {
   }
 
   const primaTotal = buscarMonto(texto, ['Prima Total']) || buscarMonto(texto, ['\\bPrima\\b(?!\\s*Total)']);
+  // Los productos de Life Seguros están dolarizados por definición (cotizan al
+  // tipo de cambio oficial mayorista). Solo se marca ARS si el texto lo dice
+  // explícitamente — de lo contrario, USD es el default correcto para esta
+  // plantilla, evitando una doble conversión accidental.
   const dicePesos = /moneda\s*:?\s*pesos?/i.test(texto) || /moneda\s*:?\s*ars\b/i.test(texto);
-const moneda = dicePesos ? 'ARS' : 'USD';
+  const moneda = dicePesos ? 'ARS' : 'USD';
 
   return { coberturas, primaMensual: primaTotal ? String(primaTotal) : '', moneda };
 }
@@ -1148,6 +1184,60 @@ function parsearOrigenes(texto) {
 }
 
 /* ============================================================
+   ANÁLISIS NARRATIVO — etapa de vida, faltantes, deducción
+   ============================================================ */
+
+function calcularEtapaDeVida(cliente, edad) {
+  const tieneHijosChicos = (cliente.hijos || []).some((h) => numOrNull(h.edad) !== null && numOrNull(h.edad) < 18);
+  const tieneHijosUniv = (cliente.hijos || []).some((h) => h.escolaridad === 'universidad' || (numOrNull(h.edad) !== null && numOrNull(h.edad) >= 18));
+  const tieneConyuge = !!cliente.conyuge;
+  const tieneCredito = !!(cliente.finanzas?.creditosActivos && cliente.finanzas.creditosActivos.trim());
+
+  if (edad !== null && edad < 30 && !tieneConyuge && (cliente.hijos || []).length === 0) {
+    return 'Estás construyendo las bases de tu vida adulta — esta es la etapa donde una protección se contrata más barata y se sostiene por más años, justamente porque la edad todavía juega a tu favor.';
+  }
+  if (tieneHijosChicos) {
+    return 'Tenés hijos que dependen de tu ingreso para crecer, estudiar y sostener su día a día. Esta etapa es el momento donde la cobertura tiene el impacto más directo: protege años de crianza que todavía están por delante.';
+  }
+  if (tieneCredito && !tieneHijosChicos) {
+    return 'Estás en una etapa de construcción patrimonial — con compromisos financieros en marcha que tu familia no debería tener que afrontar sola si algo te pasara.';
+  }
+  if (tieneHijosUniv) {
+    return 'Tus hijos están en la etapa de formarse para su futuro profesional — un momento donde sostener el plan educativo ya armado es tan importante como en cualquier otra etapa.';
+  }
+  if (edad !== null && edad >= 50) {
+    return 'Estás en la etapa de consolidar lo construido y empezar a pensar en el retiro — el momento de revisar que la cobertura siga acompañando tu patrimonio actual, no la situación de hace diez años.';
+  }
+  return 'Estás en una etapa de tu vida donde anticiparte tiene más valor que reaccionar — la protección que armes hoy es la que tu familia va a agradecer en el momento menos pensado.';
+}
+
+function calcularFaltantes(totales, finanzas) {
+  const faltantes = [];
+  if (!totales.fondoRetiro || totales.fondoRetiro === 0) {
+    faltantes.push({
+      titulo: 'Plan de retiro',
+      texto: 'Hoy estás construyendo tu presente — sumar un plan de retiro es la forma de empezar a construir, también desde ahora, los años en los que vas a querer vivir con la misma tranquilidad sin depender de seguir trabajando.',
+    });
+  }
+  if (!finanzas?.otrosSeguros || !finanzas.otrosSeguros.trim()) {
+    faltantes.push({
+      titulo: 'Cobertura de salud',
+      texto: 'Una cobertura de salud complementaria es otra capa de tranquilidad que vale la pena conversar más adelante, cuando el perfil y las prioridades lo permitan.',
+    });
+  }
+  return faltantes;
+}
+
+function calcularDeduccion(cliente, calc) {
+  const dg = cliente.deduccionGanancias || {};
+  const items = [];
+  if (numOrNull(dg.topeVidaYAhorro)) items.push({ nombre: 'Seguro de vida con ahorro', tope: numOrNull(dg.topeVidaYAhorro) });
+  if (numOrNull(dg.topeVidaPuro)) items.push({ nombre: 'Seguro de vida puro', tope: numOrNull(dg.topeVidaPuro) });
+  if (numOrNull(dg.topeRetiro)) items.push({ nombre: 'Seguro de retiro', tope: numOrNull(dg.topeRetiro) });
+  return items;
+}
+
+/* ============================================================
    GENERACIÓN DE PDF PARA EL CLIENTE
    ============================================================ */
 
@@ -1160,7 +1250,9 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
     const M = 50;
+    const BOTTOM = H - 70;
     let y = 0;
 
     const colTinta = [26, 46, 41];
@@ -1168,70 +1260,107 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     const colSage = [61, 107, 79];
     const colTerracota = [181, 72, 61];
     const colGris = [120, 120, 110];
+    const colPapel2 = [244, 240, 230];
 
+    const edad = calcEdad(cliente.fechaNacimiento);
+    const nombrePila = (cliente.nombreCompleto || 'tu cliente').split(' ')[0];
+
+    const nuevaPagina = () => {
+      doc.addPage();
+      y = 60;
+    };
+    const asegurarEspacio = (necesario) => {
+      if (y + necesario > BOTTOM) nuevaPagina();
+    };
+    const encabezadoSeccion = (titulo) => {
+      asegurarEspacio(40);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12.5);
+      doc.setTextColor(...colTinta);
+      doc.text(titulo, M, y);
+      y += 6;
+      doc.setDrawColor(...colDorado);
+      doc.setLineWidth(1.2);
+      doc.line(M, y, M + 28, y);
+      y += 20;
+    };
+    const parrafo = (texto, opts = {}) => {
+      doc.setFont(opts.font || 'helvetica', opts.style || 'normal');
+      doc.setFontSize(opts.size || 10.5);
+      doc.setTextColor(...(opts.color || colTinta));
+      const lines = doc.splitTextToSize(texto, opts.width || (W - M * 2));
+      asegurarEspacio(lines.length * (opts.lineHeight || 15) + 6);
+      doc.text(lines, M, y);
+      y += lines.length * (opts.lineHeight || 15) + (opts.marginBottom ?? 10);
+    };
+
+    // ---------- Portada / header ----------
     doc.setFillColor(...colTinta);
-    doc.rect(0, 0, W, 86, 'F');
+    doc.rect(0, 0, W, 110, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFont('times', 'bold');
-    doc.setFontSize(20);
-    doc.text('Análisis de cobertura', M, 38);
+    doc.setFontSize(22);
+    doc.text('Análisis de cobertura', M, 44);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text(cliente.nombreCompleto || 'Cliente', M, 58);
+    doc.setFontSize(12);
+    doc.text(cliente.nombreCompleto || 'Cliente', M, 68);
     doc.setFontSize(9);
     doc.setTextColor(220, 220, 215);
-    doc.text(`Preparado por Johanna Schittino · Life Advisor · ${new Date().toLocaleDateString('es-AR')}`, M, 74);
+    doc.text(`Preparado por Johanna Schittino · Life Advisor · ${new Date().toLocaleDateString('es-AR')}`, M, 88);
 
-    y = 120;
-    doc.setTextColor(...colTinta);
+    y = 145;
 
-    doc.setFont('times', 'italic');
-    doc.setFontSize(12.5);
-    const intro = `Esto no es solo una póliza: es la forma en que tu familia sigue adelante, pase lo que pase, sin que el plan de vida que armaron juntos dependa de que todo salga bien.`;
-    const introLines = doc.splitTextToSize(intro, W - M * 2);
-    doc.text(introLines, M, y);
-    y += introLines.length * 16 + 20;
+    // ---------- Introducción emocional ----------
+    parrafo(
+      `Este análisis acompaña la forma en que tu familia sigue adelante, pase lo que pase, con el mismo plan de vida que armaron juntos.`,
+      { font: 'times', style: 'italic', size: 13, lineHeight: 17, marginBottom: 18 }
+    );
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text('Situación actual', M, y);
-    y += 18;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    const edad = calcEdad(cliente.fechaNacimiento);
+    // ---------- Etapa de vida ----------
+    encabezadoSeccion('Tu momento');
+    parrafo(calcularEtapaDeVida(cliente, edad), { marginBottom: 4 });
+    parrafo(
+      'Hoy es el mejor momento para contratar: cada año que pasa, la cobertura cuesta más y tu margen para decidir con calma es más chico. Adelantarte ahora es la forma más simple de pagar menos por más años de protección.',
+      { color: colGris, size: 9.5, marginBottom: 18 }
+    );
+
+    // ---------- Situación actual ----------
+    encabezadoSeccion('Tu situación hoy');
     const filas = [
       ['Edad', edad !== null ? `${edad} años` : '—'],
       ['Ingreso mensual estimado', fmtUSD(calc.ingresoMensualUSD)],
       ['Ingreso anual estimado', fmtUSD(calc.ingresoAnualUSD)],
     ];
+    doc.setFontSize(10.5);
     filas.forEach(([k, v]) => {
+      asegurarEspacio(17);
+      doc.setFont('helvetica', 'normal');
       doc.setTextColor(...colGris);
       doc.text(k, M, y);
+      doc.setFont('helvetica', 'bold');
       doc.setTextColor(...colTinta);
-      doc.text(String(v), M + 180, y);
-      y += 16;
+      doc.text(String(v), M + 190, y);
+      y += 17;
     });
-    y += 16;
+    y += 12;
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text('Suma asegurada ideal', M, y);
-    y += 18;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(...colGris);
+    // ---------- Suma asegurada ideal ----------
+    encabezadoSeccion('Tu suma asegurada ideal');
     const textoSuma = calc.tieneCompromisosRelevantes
-      ? 'Entre 3 y 5 años de ingreso anual, más los compromisos en el tiempo de la familia (educación, créditos, proyectos).'
-      : 'Entre 3 y 5 años de ingreso anual, el estándar para que una familia mantenga su nivel de vida.';
-    doc.text(textoSuma, M, y, { maxWidth: W - M * 2 });
-    y += calc.tieneCompromisosRelevantes ? 30 : 22;
+      ? 'Entre 3 y 5 años de tu ingreso anual, más los compromisos que ya tenés en marcha (educación, créditos, proyectos) — así la cifra refleja no solo tu presente, sino lo que tu familia va a necesitar sostener en los próximos años.'
+      : 'Entre 3 y 5 años de tu ingreso anual: el estándar que te permite mantener tu nivel de vida y el de tu familia sin depender de que todo salga como hoy.';
+    parrafo(textoSuma, { color: colGris, size: 10, marginBottom: 6 });
+    asegurarEspacio(34);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
+    doc.setFontSize(18);
     doc.setTextColor(...colDorado);
     doc.text(`${fmtUSD(calc.sumaIdealMin)} — ${fmtUSD(calc.sumaIdealMax)}`, M, y);
-    y += 30;
+    y += 32;
 
+    // ---------- Qué cubre la propuesta ----------
+    encabezadoSeccion('Lo que ya tenés cubierto');
     const dibujarBarra = (label, valor, meta, esPct) => {
+      asegurarEspacio(34);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.setTextColor(...colTinta);
@@ -1241,7 +1370,7 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
       doc.text(valStr, W - M, y, { align: 'right' });
       y += 8;
       const barW = W - M * 2;
-      doc.setFillColor(230, 226, 214);
+      doc.setFillColor(...colPapel2);
       doc.roundedRect(M, y, barW, 7, 3, 3, 'F');
       const pctFill = meta ? Math.min(100, (valor / meta) * 100) : (valor > 0 ? 100 : 0);
       const color = !meta ? colDorado : (pctFill >= 100 ? colSage : pctFill >= 50 ? colDorado : colTerracota);
@@ -1250,64 +1379,100 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
       y += 26;
     };
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text('Qué cubre la propuesta', M, y);
-    y += 20;
-
     dibujarBarra('Vida / fallecimiento', calc.totales.vida, calc.sumaIdealCentro, calc.pctCobertura);
     dibujarBarra('Invalidez total y permanente', calc.totales.itp, calc.sumaIdealCentro, calc.sumaIdealCentro ? (calc.totales.itp / calc.sumaIdealCentro) * 100 : null);
     if (calc.totales.enfermedadesCriticas > 0) dibujarBarra('Enfermedades críticas', calc.totales.enfermedadesCriticas, null, null);
     if (calc.totales.muerteAccidental > 0) dibujarBarra('Muerte accidental (adicional)', calc.totales.muerteAccidental, null, null);
     if (calc.totales.fondoRetiro > 0) dibujarBarra('Fondo de retiro proyectado', calc.totales.fondoRetiro, null, null);
+    y += 8;
 
-    y += 6;
+    // ---------- Prima mensual ----------
+    encabezadoSeccion('Tu inversión mensual');
+    parrafo(`Tope recomendado: hasta el 10% de tu ingreso mensual, equivalente a ${fmtUSD(calc.primaTope)}.`, { color: colGris, size: 10, marginBottom: 6 });
+    asegurarEspacio(26);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text('Prima mensual', M, y);
-    y += 18;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(...colGris);
-    doc.text(`Tope recomendado: 10% del ingreso mensual = ${fmtUSD(calc.primaTope)}`, M, y);
-    y += 18;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(calc.pctPrima > 100 ? colTerracota[0] : colSage[0], calc.pctPrima > 100 ? colTerracota[1] : colSage[1], calc.pctPrima > 100 ? colTerracota[2] : colSage[2]);
+    doc.setFontSize(15);
+    const colorPrima = calc.pctPrima > 100 ? colTerracota : colSage;
+    doc.setTextColor(...colorPrima);
     doc.text(`${fmtUSD(calc.primaMensualTotal)} / mes`, M, y);
-    y += 34;
+    y += 30;
 
+    // ---------- Compromisos en el tiempo ----------
     if (calc.tieneCompromisosRelevantes) {
-      if (y > 650) { doc.addPage(); y = 60; }
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(...colTinta);
-      doc.text('Compromisos en el tiempo', M, y);
-      y += 18;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
-      doc.setTextColor(...colGris);
-      doc.text('Lo que esta familia quiere sostener en los próximos años, además del ingreso de hoy.', M, y);
-      y += 18;
+      encabezadoSeccion('Lo que estás construyendo en el tiempo');
+      parrafo('Más allá de tu ingreso de hoy, esto es lo que tu plan está acompañando a futuro:', { color: colGris, size: 9.5, marginBottom: 8 });
       for (const cm of cliente.compromisos || []) {
         const anios = numOrNull(cm.anosRestantes);
         const monto = numOrNull(cm.montoAnualUSD);
         if (!anios || !monto) continue;
+        asegurarEspacio(17);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(...colTinta);
-        doc.text(`${cm.descripcion || 'Compromiso'} — ${anios} años`, M, y);
+        doc.text(`${cm.descripcion || 'Compromiso'} — ${anios} años por delante`, M, y);
         doc.setTextColor(...colGris);
         doc.text(`${fmtUSD(monto)}/año`, W - M, y, { align: 'right' });
-        y += 16;
+        y += 17;
       }
       y += 10;
     }
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...colGris);
-    doc.text('Los montos en pesos fueron dolarizados al tipo de cambio oficial mayorista cargado al momento del análisis. Este documento es una herramienta de planificación, no reemplaza las condiciones contractuales de la póliza.', M, 780, { maxWidth: W - M * 2 });
+    // ---------- Deducción de Ganancias ----------
+    const itemsDeduccion = calcularDeduccion(cliente, calc);
+    if (itemsDeduccion.length > 0) {
+      encabezadoSeccion('Un beneficio adicional: deducción de Ganancias');
+      parrafo(
+        'Lo que destinás a tu protección también puede jugar a tu favor en tu declaración anual. Estos son los topes vigentes que se aplican a tu plan:',
+        { color: colGris, size: 9.5, marginBottom: 8 }
+      );
+      itemsDeduccion.forEach((it) => {
+        asegurarEspacio(17);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(...colTinta);
+        doc.text(it.nombre, M, y);
+        doc.setTextColor(...colGris);
+        doc.text(`tope anual: $${new Intl.NumberFormat('es-AR').format(it.tope)}`, W - M, y, { align: 'right' });
+        y += 17;
+      });
+      y += 8;
+    }
+
+    // ---------- Lo que podés sumar ----------
+    const faltantes = calcularFaltantes(calc.totales, cliente.finanzas);
+    if (faltantes.length > 0) {
+      encabezadoSeccion('Lo que podés sumar a tu plan');
+      faltantes.forEach((f) => {
+        asegurarEspacio(20);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.setTextColor(...colTinta);
+        doc.text(f.titulo, M, y);
+        y += 14;
+        parrafo(f.texto, { color: colGris, size: 9.5, marginBottom: 12 });
+      });
+    }
+
+    // ---------- Acompañamiento continuo ----------
+    encabezadoSeccion('Mi acompañamiento');
+    parrafo(
+      `Este análisis es un punto de partida, no un cierre. Vamos a revisarlo juntos de forma periódica para que tu suma asegurada siga representando tu realidad — si cambia tu ingreso, tu familia crece, o aparece un nuevo proyecto, tu plan se actualiza con vos. Mi trabajo es que esta protección siempre tenga sentido para la vida que estás viviendo, no para la de hace cinco años.`,
+      { marginBottom: 4 }
+    );
+
+    // ---------- Footer en cada página ----------
+    const totalPaginas = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPaginas; p++) {
+      doc.setPage(p);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...colGris);
+      doc.text(
+        'Los montos en pesos fueron dolarizados al tipo de cambio oficial mayorista cargado al momento del análisis. Este documento es una herramienta de planificación y no reemplaza las condiciones contractuales de la póliza.',
+        M, H - 40, { maxWidth: W - M * 2 }
+      );
+      doc.text(`${p} / ${totalPaginas}`, W - M, H - 40, { align: 'right' });
+    }
 
     const nombreArchivo = `Analisis-${(cliente.nombreCompleto || 'cliente').replace(/\s+/g, '-')}-${todayISO()}.pdf`;
     doc.save(nombreArchivo);
