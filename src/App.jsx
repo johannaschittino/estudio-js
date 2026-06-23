@@ -246,6 +246,45 @@ function EstudioApp({ user }) {
   );
 }
 
+/* ============================================================
+   HELPERS DE UI — usados en PanelAnalisis
+   ============================================================ */
+function Seccion({ icono, titulo, children }) {
+  const paths = {
+    target: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM12 12h.01',
+    check: 'M20 6 9 17l-5-5',
+    clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 6v6l4 2',
+    file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z M14 2v6h6',
+    coin: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 6v12M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1-3 2.5 1.3 2 3 2.5 3 1.1 3 2.5-1.3 2.5-3 2.5-3-1-3-2.5',
+    edit: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z',
+    family: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
+  };
+  return (
+    <section style={{ marginBottom: 30, paddingBottom: 26, borderBottom: `1px solid ${T.borde}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.dorado} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d={paths[icono] || ''} />
+        </svg>
+        <h2 style={{ fontFamily: T.serif, fontSize: 18, fontWeight: 600, margin: 0 }}>{titulo}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Grid({ cols, children }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: '14px 16px' }}>{children}</div>;
+}
+
+function Campo({ label, span, children }) {
+  return (
+    <div style={span ? { gridColumn: `span ${span}` } : undefined}>
+      <label style={{ display: 'block', fontSize: 11, color: T.tinta40, marginBottom: 5, letterSpacing: 0.3, textTransform: 'uppercase' }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
 function PanelAnalisis({ prospecto, onUpdate, onVolverFicha }) {
   const [mostrarCarga, setMostrarCarga] = useState(false);
   const [generandoPDF, setGenerandoPDF] = useState(false);
