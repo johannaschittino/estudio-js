@@ -66,6 +66,13 @@ export const nuevoProspecto = () => ({
     topeVidaPuro: '',
     topeRetiro: '',
   },
+  // Contexto personal — datos de vida que no entran en categorías estándar
+  // (cobró seguro de un familiar, historia laboral, contexto emocional, etc.)
+  contextPersonal: '',
+  // Grupo familiar — ID compartido entre fichas vinculadas
+  grupoFamiliarId: null,
+  // IDs de prospectos vinculados (cónyuge, hijos mayores, etc.)
+  vinculados: [],  // [{ id, relacion: 'conyuge'|'hijo'|'padre'|'otro', nombre }]
 
   creadoEn: new Date().toISOString(),
   actualizadoEn: new Date().toISOString(),
