@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { T } from './tokens.js';
-import { ETAPAS, FUENTES, uid, todayISO } from './data.js';
+import { ETAPAS, FUENTES, uid, todayISO, nuevoProspecto } from './data.js';
 
 const ETAPA_COLOR = {
   alpha: T.dorado, entrevistado: '#5B8FA8', propuesta: T.sage,
@@ -20,6 +20,8 @@ const Icon = ({ name, size = 16 }) => {
     phone: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.56 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.69a16 16 0 0 0 6.29 6.29l1.87-1.87a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92Z',
     mail: 'M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6',
     alert: 'M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01',
+    link: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+    userplus: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6M22 11h-6',
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -36,7 +38,7 @@ const TIPOS_CONTACTO = [
   { value: 'nota', label: 'Nota interna' },
 ];
 
-export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrAnalisis }) {
+export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrAnalisis, onCrearDesde, prospectos = [] }) {
   const [tab, setTab] = useState('seguimiento');
   const [nuevoContacto, setNuevoContacto] = useState({ tipo: 'llamada', texto: '', fecha: todayISO() });
   const [mostrarFormContacto, setMostrarFormContacto] = useState(false);
@@ -133,7 +135,7 @@ export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrA
           />
         )}
         {tab === 'datos' && (
-          <TabDatos p={p} onUpdate={onUpdate} />
+          <TabDatos p={p} onUpdate={onUpdate} onCrearDesde={onCrearDesde} prospectos={prospectos} />
         )}
       </div>
     </div>
@@ -256,7 +258,7 @@ function TabSeguimiento({ p, set, nuevoContacto, setNuevoContacto, mostrarFormCo
    TAB: DATOS
    ============================================================ */
 
-function TabDatos({ p, onUpdate }) {
+function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
   const set = (field, value) => onUpdate({ [field]: value });
   const setFinanzas = (field, value) => onUpdate({ finanzas: { ...p.finanzas, [field]: value } });
   const setTipoCambio = (field, value) => onUpdate({ tipoCambio: { ...p.tipoCambio, [field]: value } });
@@ -308,13 +310,48 @@ function TabDatos({ p, onUpdate }) {
       {/* Familia */}
       <div style={S.seccion}>
         <h3 style={S.seccionTitulo}>Familia</h3>
+
+        {/* Grupo familiar — vínculos con otras fichas */}
+        {(p.vinculados || []).length > 0 && (
+          <div style={{ background: T.papel2, borderRadius: 9, padding: '10px 14px', marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: T.tinta40, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>Grupo familiar</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {(p.vinculados || []).map((v) => {
+                const fichaVinculada = prospectos.find((pr) => pr.id === v.id);
+                return (
+                  <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: `1px solid ${T.borde}`, borderRadius: 7, padding: '5px 10px', fontSize: 12.5 }}>
+                    <span style={{ color: T.tinta40, fontSize: 11 }}>{v.relacion}</span>
+                    <span style={{ fontWeight: 600 }}>{fichaVinculada?.nombre || v.nombre}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginBottom: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={S.subLabel}>Cónyuge / pareja</span>
-            {!p.conyuge
-              ? <button style={S.btnMini} onClick={() => onUpdate({ conyuge: { nombre: '', edad: '', ocupacion: '' } })}>+ Agregar</button>
-              : <button style={S.btnMini} onClick={() => onUpdate({ conyuge: null })}>Quitar</button>
-            }
+            <div style={{ display: 'flex', gap: 8 }}>
+              {p.conyuge && onCrearDesde && (
+                <button
+                  style={{ ...S.btnMini, color: T.sage, borderColor: T.sage }}
+                  onClick={() => onCrearDesde({
+                    nombre: p.conyuge.nombre || '',
+                    rol: p.conyuge.ocupacion || '',
+                    vinculados: [{ id: p.id, relacion: 'cónyuge', nombre: p.nombre }],
+                    grupoFamiliarId: p.grupoFamiliarId || p.id,
+                  })}
+                  title="Crear ficha propia para el cónyuge"
+                >
+                  <Icon name="userplus" size={12} /> Crear ficha
+                </button>
+              )}
+              {!p.conyuge
+                ? <button style={S.btnMini} onClick={() => onUpdate({ conyuge: { nombre: '', edad: '', ocupacion: '' } })}>+ Agregar</button>
+                : <button style={S.btnMini} onClick={() => onUpdate({ conyuge: null })}>Quitar</button>
+              }
+            </div>
           </div>
           {p.conyuge && (
             <Grid cols={3}>
@@ -332,7 +369,22 @@ function TabDatos({ p, onUpdate }) {
           <div key={h.id} style={S.card2}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
               <span style={{ fontSize: 11, color: T.tinta40 }}>HIJO/A {i + 1}</span>
-              <button style={S.iconBtnGhost} onClick={() => quitarHijo(h.id)}><Icon name="trash" size={13} /></button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {h.nombre && onCrearDesde && (
+                  <button
+                    style={{ ...S.btnMini, fontSize: 11, color: T.sage, borderColor: T.sage }}
+                    onClick={() => onCrearDesde({
+                      nombre: h.nombre || '',
+                      vinculados: [{ id: p.id, relacion: 'padre/madre', nombre: p.nombre }],
+                      grupoFamiliarId: p.grupoFamiliarId || p.id,
+                    })}
+                    title="Crear ficha propia para este hijo/a"
+                  >
+                    <Icon name="userplus" size={11} /> Crear ficha
+                  </button>
+                )}
+                <button style={S.iconBtnGhost} onClick={() => quitarHijo(h.id)}><Icon name="trash" size={13} /></button>
+              </div>
             </div>
             <Grid cols={4}>
               <Campo label="Nombre"><input style={S.input} value={h.nombre || ''} onChange={(e) => setHijo(h.id, 'nombre', e.target.value)} /></Campo>
@@ -416,6 +468,20 @@ function TabDatos({ p, onUpdate }) {
             </Grid>
           </div>
         ))}
+      </div>
+
+      {/* Contexto personal */}
+      <div style={S.seccion}>
+        <h3 style={S.seccionTitulo}>Contexto personal</h3>
+        <p style={{ fontSize: 12.5, color: T.tinta40, margin: '0 0 10px', lineHeight: 1.5 }}>
+          Lo que importa saber y no entra en ninguna categoría — historia de vida, contexto familiar, experiencias con seguros, lo que mencionó en la reunión.
+        </p>
+        <textarea
+          style={{ ...S.input, minHeight: 100, resize: 'vertical', lineHeight: 1.6 }}
+          placeholder="Ej: Cobró el seguro de su padre hace dos años. Tiene desconfianza inicial de las aseguradoras pero quedó muy conforme con la experiencia. Tuvo que dejar la facultad para trabajar y ahora lo retomó..."
+          value={p.contextPersonal || ''}
+          onChange={(e) => set('contextPersonal', e.target.value)}
+        />
       </div>
 
       {/* Finanzas */}
