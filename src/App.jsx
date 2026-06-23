@@ -65,6 +65,21 @@ const Icon = ({ name, size = 18, className = '' }) => {
 };
 
 /* ============================================================
+   CÁLCULO DE COMPROMISOS (usada en PanelAnalisis)
+   ============================================================ */
+function calcularAporteCompromisos(compromisos, horizonteAnios) {
+  let total = 0;
+  for (const cm of compromisos || []) {
+    const anios = numOrNull(cm.anosRestantes);
+    const monto = numOrNull(cm.montoAnualUSD);
+    if (!anios || !monto) continue;
+    const aniosVigentes = Math.min(anios, horizonteAnios);
+    if (aniosVigentes > 0) total += monto * aniosVigentes;
+  }
+  return total;
+}
+
+/* ============================================================
    APP — gate de autenticación
    ============================================================ */
 export default function App() {
