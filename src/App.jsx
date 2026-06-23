@@ -33,7 +33,43 @@ const fmtPct = (n) => {
 };
 const numOrNull = (v) => {
   if (v === '' || v === null || v === undefined) return null;
-  const n = Number(String(v).replace(/\./g, '').replace(',', '.'));
+  const s = String(v).trim();
+  // Si tiene coma Y punto, determinar cuál es decimal por posición
+  // Ej: "1.234,56" → punto=miles, coma=decimal
+  // Ej: "261.53" → punto=decimal (solo un punto, menos de 3 dígitos después)
+  // Ej: "1,234.56" → coma=miles, punto=decimal
+  let normalizado;
+  if (s.includes(',') && s.includes('.')) {
+    // Ambos presentes — el último es el decimal
+    const ultimaComa = s.lastIndexOf(',');
+    const ultimoPunto = s.lastIndexOf('.');
+    if (ultimaComa > ultimoPunto) {
+      // Formato argentino: 1.234,56
+      normalizado = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // Formato anglosajón: 1,234.56
+      normalizado = s.replace(/,/g, '');
+    }
+  } else if (s.includes(',')) {
+    // Solo coma — puede ser decimal (0,5) o miles (1,234)
+    const partes = s.split(',');
+    if (partes.length === 2 && partes[1].length <= 2) {
+      normalizado = s.replace(',', '.'); // decimal
+    } else {
+      normalizado = s.replace(/,/g, ''); // miles
+    }
+  } else if (s.includes('.')) {
+    // Solo punto — puede ser decimal (261.53) o miles (1.234)
+    const partes = s.split('.');
+    if (partes.length === 2 && partes[1].length <= 2) {
+      normalizado = s; // decimal: "261.53" → 261.53
+    } else {
+      normalizado = s.replace(/\./g, ''); // miles: "1.234" → 1234
+    }
+  } else {
+    normalizado = s;
+  }
+  const n = Number(normalizado);
   return isNaN(n) ? null : n;
 };
 
