@@ -60,6 +60,8 @@ export default function Pipeline({ prospectos, onAbrir, onCreate, onUpdate, onEl
   const filtrados = busqueda
     ? prospectos.filter((p) =>
         (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+        (p.rol || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+        (p.notas || '').toLowerCase().includes(busqueda.toLowerCase()) ||
         (p.rol || '').toLowerCase().includes(busqueda.toLowerCase())
       )
     : prospectos;
@@ -68,6 +70,18 @@ export default function Pipeline({ prospectos, onAbrir, onCreate, onUpdate, onEl
 
   const hoy = todayISO();
   const vencidos = (lista) => lista.filter((p) => p.fechaAccion && p.fechaAccion < hoy && p.estado !== 'cerrado' && p.estado !== 'cancelado');
+
+  // Cumpleaños: prospectos que cumplen en los próximos 7 días
+  const cumpleañosProximos = prospectos.filter((p) => {
+    if (!p.fechaNacimiento) return false;
+    const hoyDate = new Date();
+    const nac = new Date(p.fechaNacimiento + 'T00:00:00');
+    if (isNaN(nac.getTime())) return false;
+    const cumple = new Date(hoyDate.getFullYear(), nac.getMonth(), nac.getDate());
+    if (cumple < hoyDate) cumple.setFullYear(hoyDate.getFullYear() + 1);
+    const diff = (cumple - hoyDate) / (1000 * 60 * 60 * 24);
+    return diff >= 0 && diff <= 7;
+  });
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
@@ -129,6 +143,34 @@ export default function Pipeline({ prospectos, onAbrir, onCreate, onUpdate, onEl
             <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
             <button style={{ ...S.btnGhost, marginTop: 10, width: '100%' }} onClick={() => setMostrarImport(false)}>Cancelar</button>
           </div>
+        </div>
+      )}
+
+
+      {/* Banner de cumpleaños */}
+      {cumpleañosProximos.length > 0 && (
+        <div style={{ background: 'rgba(201,162,75,0.1)', borderBottom: `1px solid rgba(201,162,75,0.3)`, padding: '10px 24px', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.dorado }}>🎂 Cumpleaños próximos</span>
+          {cumpleañosProximos.map((p) => {
+            const nac = new Date(p.fechaNacimiento + 'T00:00:00');
+            const hoyDate = new Date();
+            const cumple = new Date(hoyDate.getFullYear(), nac.getMonth(), nac.getDate());
+            if (cumple < hoyDate) cumple.setFullYear(hoyDate.getFullYear() + 1);
+            const diff = Math.round((cumple - hoyDate) / (1000 * 60 * 60 * 24));
+            const edad = hoyDate.getFullYear() - nac.getFullYear() + (diff === 0 ? 1 : 0);
+            return (
+              <button
+                key={p.id}
+                onClick={() => onAbrir(p.id)}
+                style={{ background: '#fff', border: `1px solid ${T.dorado}`, borderRadius: 7, padding: '4px 12px', fontSize: 12.5, cursor: 'pointer', color: T.tinta }}
+              >
+                <strong>{p.nombre}</strong>
+                <span style={{ color: T.tinta40, marginLeft: 6 }}>
+                  {diff === 0 ? `¡hoy! ${edad} años` : `en ${diff} día${diff !== 1 ? 's' : ''} — ${edad} años`}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 
