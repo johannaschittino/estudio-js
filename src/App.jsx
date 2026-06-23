@@ -1330,14 +1330,61 @@ function parsearLife(texto) {
     }
   }
 
-  // Módulos de salud: detecta cualquier línea "Salud - [nombre]  $monto"
-  const regexSalud = /Salud\s*[-–]\s*([^\n$\d]{3,40?})\s+\$?\s*([\d.,]+)/gi;
-  let matchSalud;
-  while ((matchSalud = regexSalud.exec(texto)) !== null) {
-    const nombre = matchSalud[1].trim();
-    const monto = numDesdeTexto(matchSalud[2]);
-    if (monto && monto > 0) {
-      coberturas.push({ nombre: `Salud - ${nombre}`, beneficio: String(monto), tipo: 'salud' });
+  // Módulos de salud: el PDF tiene nombres en columna izquierda y montos en columna derecha.
+  // pdf.js puede extraer el texto de dos formas:
+  // A) Todo junto en una línea: "Salud - Cáncer Integral $ 50.000.000,00"
+  // B) Nombres primero, montos después (columnas separadas)
+  // Manejamos ambos casos.
+
+  // Paso 1: extraer todos los nombres de módulos de salud
+  const nombresSalud = [];
+  const regexNombreSalud = /Salud\s*[-–]\s*([^\n\r$\d]{3,60}?)(?=\s*(?:Salud|$|\n|\r|\$|\d))/gi;
+  let matchNombre;
+  while ((matchNombre = regexNombreSalud.exec(texto)) !== null) {
+    const n = matchNombre[1].trim().replace(/\s+/g, ' ');
+    if (n.length > 2) nombresSalud.push(n);
+  }
+
+  if (nombresSalud.length > 0) {
+    // Paso 2: intentar extraer montos asociados a cada módulo en la misma línea
+    let modulosEncontrados = 0;
+    for (const nombre of nombresSalud) {
+      const escapado = nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const reLinea = new RegExp(escapado + '\\s+\\$?\\s*([\\d.,]+)', 'i');
+      const mLinea = texto.match(reLinea);
+      if (mLinea) {
+        const monto = numDesdeTexto(mLinea[1]);
+        if (monto && monto > 0) {
+          coberturas.push({ nombre: `Salud - ${nombre}`, beneficio: String(monto), tipo: 'salud' });
+          modulosEncontrados++;
+        }
+      }
+    }
+
+    // Paso 3: si no encontramos montos en la misma línea (formato columnar),
+    // buscamos los montos de beneficio que aparecen ANTES de la sección de prima,
+    // excluyendo los montos de prima inicial (columna derecha del PDF de salud).
+    if (modulosEncontrados === 0) {
+      // Extraemos el bloque entre "Cobertura" y "Prima" para capturar solo los beneficios
+      const bloqueCobertura = texto.match(/Cobertura[\s\S]*?(?=Prima\s|$)/i)?.[0] || texto;
+      // Capturamos todos los montos grandes (beneficios) en orden de aparición
+      const regexMontos = /\$\s*([\d.,]+)/g;
+      const montos = [];
+      let mMonto;
+      while ((mMonto = regexMontos.exec(bloqueCobertura)) !== null) {
+        const n = numDesdeTexto(mMonto[1]);
+        // Filtramos montos pequeños (primas) vs grandes (beneficios): > 1000
+        if (n && n > 1000) montos.push(n);
+      }
+      // Emparejamos nombres con montos por posición
+      nombresSalud.forEach((nombre, idx) => {
+        if (montos[idx]) {
+          coberturas.push({ nombre: `Salud - ${nombre}`, beneficio: String(montos[idx]), tipo: 'salud' });
+        } else {
+          // Si no hay monto, igual agregamos el módulo sin beneficio para que aparezca
+          coberturas.push({ nombre: `Salud - ${nombre}`, beneficio: '0', tipo: 'salud' });
+        }
+      });
     }
   }
 
