@@ -216,7 +216,7 @@ function EstudioApp({ user }) {
       </header>
 
       {/* Contenido */}
-      <div style={SApp.body}>
+      <div style={{ ...SApp.body, overflowY: vista === 'analisis' ? 'auto' : 'hidden' }}>
         {vista === 'pipeline' && (
           <Pipeline
             prospectos={prospectos}
@@ -349,10 +349,10 @@ function PanelAnalisis({ prospecto, onUpdate, onVolverFicha }) {
     <main style={S.main}>
       <div style={S.fichaHeader}>
         <div>
-          <h1 style={S.h1}>{prospecto.nombreCompleto || 'Cliente sin nombre'}</h1>
+          <h1 style={S.h1}>{prospecto.nombre || prospecto.nombreCompleto || 'Cliente sin nombre'}</h1>
           <p style={S.heroSub}>
             {calcEdad(prospecto.fechaNacimiento) !== null ? `${calcEdad(prospecto.fechaNacimiento)} años · ` : ''}
-            {prospecto.ocupacion || 'Sin ocupación cargada'}
+            {prospecto.rol || prospecto.ocupacion || 'Sin ocupación cargada'}
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
@@ -1128,7 +1128,7 @@ async function generarPDFCliente(prospecto, calc, setGenerando) {
     const colBorde = [200, 196, 186];
 
     const edad = calcEdad(prospecto.fechaNacimiento);
-    const nombrePila = (prospecto.nombreCompleto || 'tu prospecto').split(' ')[0];
+    const nombrePila = (prospecto.nombre || prospecto.nombreCompleto || 'tu prospecto').split(' ')[0];
 
     const nuevaPagina = () => {
       doc.addPage();
@@ -1168,7 +1168,7 @@ async function generarPDFCliente(prospecto, calc, setGenerando) {
     doc.text('Análisis de cobertura', M, 44);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(12);
-    doc.text(prospecto.nombreCompleto || 'Cliente', M, 68);
+    doc.text(prospecto.nombre || prospecto.nombreCompleto || 'Cliente', M, 68);
     doc.setFontSize(9);
     doc.setTextColor(220, 220, 215);
     doc.text(`Preparado por Johanna Schittino · Life Advisor · ${new Date().toLocaleDateString('es-AR')}`, M, 88);
@@ -1490,7 +1490,7 @@ async function generarPDFCliente(prospecto, calc, setGenerando) {
       doc.text(`${p} / ${totalPaginas}`, W - M, H - 40, { align: 'right' });
     }
 
-    const nombreArchivo = `Analisis-${(prospecto.nombreCompleto || 'prospecto').replace(/\s+/g, '-')}-${todayISO()}.pdf`;
+    const nombreArchivo = `Analisis-${(prospecto.nombre || prospecto.nombreCompleto || 'prospecto').replace(/\s+/g, '-')}-${todayISO()}.pdf`;
     doc.save(nombreArchivo);
   } catch (e) {
     alert('No se pudo generar el PDF: ' + e.message);
