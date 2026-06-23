@@ -9,6 +9,7 @@ import { T } from './tokens.js';
 import Login from './Login.jsx';
 import Pipeline from './Pipeline.jsx';
 import FichaProspecto from './FichaProspecto.jsx';
+import Dashboard from './Dashboard.jsx';
 
 /* ============================================================
    UTILIDADES COMPARTIDAS (usadas en PanelAnalisis)
@@ -211,13 +212,35 @@ function EstudioApp({ user }) {
       {/* Top bar */}
       <header style={SApp.topbar}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {vista !== 'pipeline' && (
+          {(vista === 'pipeline' || vista === 'dashboard') && (
+            <button onClick={() => { setVista('pipeline'); setActivoId(null); }} style={SApp.iconBtn}>
+              <Icon name="back" size={17} />
+            </button>
+          )}
+          {vista !== 'pipeline' && vista !== 'dashboard' && (
             <button onClick={() => { setVista('pipeline'); setActivoId(null); }} style={SApp.iconBtn}>
               <Icon name="back" size={17} />
             </button>
           )}
           <span style={SApp.brandMark}>Estudio</span>
-          {activo && vista !== 'pipeline' && (
+          {/* Navegación principal — solo visible en pipeline y dashboard */}
+          {(vista === 'pipeline' || vista === 'dashboard') && (
+            <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+              <button
+                onClick={() => setVista('pipeline')}
+                style={{ ...SApp.navBtn, ...(vista === 'pipeline' ? SApp.navBtnActivo : {}) }}
+              >
+                Pipeline
+              </button>
+              <button
+                onClick={() => setVista('dashboard')}
+                style={{ ...SApp.navBtn, ...(vista === 'dashboard' ? SApp.navBtnActivo : {}) }}
+              >
+                Dashboard
+              </button>
+            </div>
+          )}
+          {activo && vista !== 'pipeline' && vista !== 'dashboard' && (
             <>
               <span style={{ color: T.tinta40, fontSize: 14 }}>›</span>
               <span style={{ fontFamily: T.serif, fontSize: 15 }}>{activo.nombre || 'Sin nombre'}</span>
@@ -252,7 +275,10 @@ function EstudioApp({ user }) {
       </header>
 
       {/* Contenido */}
-      <div style={{ ...SApp.body, overflowY: vista === 'analisis' ? 'auto' : 'hidden' }}>
+      <div style={{ ...SApp.body, overflowY: (vista === 'analisis' || vista === 'dashboard') ? 'auto' : 'hidden' }}>
+        {vista === 'dashboard' && (
+          <Dashboard prospectos={prospectos} />
+        )}
         {vista === 'pipeline' && (
           <Pipeline
             prospectos={prospectos}
@@ -265,9 +291,22 @@ function EstudioApp({ user }) {
         {vista === 'ficha' && activo && (
           <FichaProspecto
             prospecto={activo}
+            prospectos={prospectos}
             onUpdate={(patch) => persistir(activo.id, patch)}
             onVolver={() => { setVista('pipeline'); setActivoId(null); }}
             onIrAnalisis={() => setVista('analisis')}
+            onCrearDesde={(datosIniciales) => {
+              // Crear ficha nueva para un familiar, vinculada al prospecto actual
+              const nuevo = { ...nuevoProspecto(), ...datosIniciales };
+              // Vincular al prospecto actual también
+              const vinculadosActualizados = [...(activo.vinculados || []), {
+                id: nuevo.id,
+                relacion: datosIniciales.vinculados?.[0]?.relacion === 'padre/madre' ? 'hijo/a' : 'cónyuge',
+                nombre: nuevo.nombre,
+              }];
+              persistir(activo.id, { vinculados: vinculadosActualizados, grupoFamiliarId: activo.grupoFamiliarId || activo.id });
+              crearProspecto(nuevo);
+            }}
           />
         )}
         {vista === 'analisis' && activo && (
@@ -1631,4 +1670,6 @@ const SApp = {
   iconBtn: { background: 'none', border: `1px solid ${T.borde}`, borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.tinta, cursor: 'pointer' },
   btnPrimary: { display: 'flex', alignItems: 'center', gap: 6, background: T.tinta, color: T.papel, border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
   btnGhost: { display: 'flex', alignItems: 'center', gap: 6, background: 'none', color: T.tinta, border: `1px solid ${T.borde}`, borderRadius: 8, padding: '7px 14px', fontSize: 13, cursor: 'pointer' },
+  navBtn: { background: 'none', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 13, cursor: 'pointer', color: T.tinta60, fontFamily: T.sans },
+  navBtnActivo: { background: T.papel2, color: T.tinta, fontWeight: 600 },
 };
