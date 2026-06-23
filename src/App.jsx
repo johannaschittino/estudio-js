@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './firebase.js';
-import { uid, todayISO, nuevoCliente, cargarClientes, guardarCliente, eliminarClienteRemoto } from './data.js';
+import {
+  uid, todayISO, nuevoProspecto,
+  cargarProspectos, guardarProspecto, eliminarProspecto,
+} from './data.js';
 import { T } from './tokens.js';
 import Login from './Login.jsx';
+import Pipeline from './Pipeline.jsx';
+import FichaProspecto from './FichaProspecto.jsx';
 
 /* ============================================================
-   FORMATO
+   UTILIDADES COMPARTIDAS (usadas en PanelAnalisis)
    ============================================================ */
-
 const calcEdad = (fechaNac) => {
   if (!fechaNac) return null;
   const hoy = new Date();
@@ -19,41 +23,26 @@ const calcEdad = (fechaNac) => {
   if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
   return edad;
 };
-
 const fmtUSD = (n) => {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '—';
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 };
-
 const fmtPct = (n) => {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(n) + '%';
 };
-
 const numOrNull = (v) => {
   if (v === '' || v === null || v === undefined) return null;
-  const s = String(v).trim();
-  // Si ya es un número JS válido en formato estándar (punto decimal, sin
-  // separador de miles) lo usamos directo — esto cubre los valores que
-  // vienen del parser de cotizaciones, generados con String(numero).
-  if (/^-?\d+(\.\d+)?$/.test(s)) {
-    const directo = Number(s);
-    if (!isNaN(directo)) return directo;
-  }
-  // Si no, asumimos formato argentino tipeado a mano: punto de miles,
-  // coma decimal (ej: "1.234,56").
-  const n = Number(s.replace(/\./g, '').replace(',', '.'));
+  const n = Number(String(v).replace(/\./g, '').replace(',', '.'));
   return isNaN(n) ? null : n;
 };
 
 /* ============================================================
-   ICONOS (inline SVG, sin librería)
+   ICONOS
    ============================================================ */
-
 const Icon = ({ name, size = 18, className = '' }) => {
   const paths = {
     plus: 'M12 5v14M5 12h14',
-    user: 'M20 21a8 8 0 0 0-16 0M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
     back: 'M19 12H5M12 19l-7-7 7-7',
     upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
     file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z M14 2v6h6',
@@ -62,13 +51,11 @@ const Icon = ({ name, size = 18, className = '' }) => {
     edit: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z',
     download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
     coin: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 6v12M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1-3 2.5 1.3 2 3 2.5 3 1.1 3 2.5-1.3 2.5-3 2.5-3-1-3-2.5',
-    home: 'M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5Z',
     alert: 'M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01',
     target: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM12 12h.01',
-    family: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
     clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 6v6l4 2',
     logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
-    cap: 'M22 10 12 5 2 10l10 5 10-5ZM6 12v5c0 1 3 3 6 3s6-2 6-3v-5',
+    family: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -80,9 +67,8 @@ const Icon = ({ name, size = 18, className = '' }) => {
 /* ============================================================
    APP — gate de autenticación
    ============================================================ */
-
 export default function App() {
-  const [user, setUser] = useState(undefined); // undefined = cargando, null = sin sesión
+  const [user, setUser] = useState(undefined);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
@@ -98,26 +84,24 @@ export default function App() {
   }
 
   if (!user) return <Login />;
-
   return <EstudioApp user={user} />;
 }
 
 /* ============================================================
-   ESTUDIO — app autenticada
+   ESTUDIO APP — lógica principal
    ============================================================ */
-
 function EstudioApp({ user }) {
-  const [clientes, setClientes] = useState([]);
+  const [prospectos, setProspectos] = useState([]);
   const [cargando, setCargando] = useState(true);
-  const [vista, setVista] = useState('lista');
-  const [clienteActivoId, setClienteActivoId] = useState(null);
-  const [guardadoEstado, setGuardadoEstado] = useState('ok'); // ok | guardando | error
+  const [vista, setVista] = useState('pipeline'); // pipeline | ficha | analisis
+  const [activoId, setActivoId] = useState(null);
+  const [guardadoEstado, setGuardadoEstado] = useState('ok');
 
   useEffect(() => {
     (async () => {
       try {
-        const c = await cargarClientes(user.uid);
-        setClientes(c);
+        const p = await cargarProspectos(user.uid);
+        setProspectos(p);
       } catch (e) {
         console.error(e);
       } finally {
@@ -126,577 +110,140 @@ function EstudioApp({ user }) {
     })();
   }, [user.uid]);
 
-  const actualizarCliente = useCallback((id, patch) => {
-    setClientes((prev) => {
-      const next = prev.map((c) => (c.id === id ? { ...c, ...patch, actualizadoEn: new Date().toISOString() } : c));
-      const actualizado = next.find((c) => c.id === id);
-      setGuardadoEstado('guardando');
-      guardarCliente(user.uid, actualizado)
-        .then(() => setGuardadoEstado('ok'))
-        .catch((e) => { console.error(e); setGuardadoEstado('error'); });
+  const persistir = useCallback((id, patch) => {
+    setProspectos((prev) => {
+      const next = prev.map((p) =>
+        p.id === id ? { ...p, ...patch, actualizadoEn: new Date().toISOString() } : p
+      );
+      const actualizado = next.find((p) => p.id === id);
+      if (actualizado) {
+        setGuardadoEstado('guardando');
+        guardarProspecto(user.uid, actualizado)
+          .then(() => setGuardadoEstado('ok'))
+          .catch(() => setGuardadoEstado('error'));
+      }
       return next;
     });
   }, [user.uid]);
 
-  const crearCliente = useCallback(() => {
-    const c = nuevoCliente();
-    setClientes((prev) => [c, ...prev]);
+  const crearProspecto = useCallback((nuevo) => {
+    setProspectos((prev) => [nuevo, ...prev]);
     setGuardadoEstado('guardando');
-    guardarCliente(user.uid, c)
+    guardarProspecto(user.uid, nuevo)
       .then(() => setGuardadoEstado('ok'))
-      .catch((e) => { console.error(e); setGuardadoEstado('error'); });
-    setClienteActivoId(c.id);
+      .catch(() => setGuardadoEstado('error'));
+    setActivoId(nuevo.id);
     setVista('ficha');
   }, [user.uid]);
 
-  const eliminarCliente = useCallback((id) => {
-    setClientes((prev) => prev.filter((c) => c.id !== id));
-    eliminarClienteRemoto(id).catch((e) => console.error(e));
-    if (clienteActivoId === id) {
-      setVista('lista');
-      setClienteActivoId(null);
-    }
-  }, [clienteActivoId]);
+  const eliminarP = useCallback((id) => {
+    setProspectos((prev) => prev.filter((p) => p.id !== id));
+    eliminarProspecto(id).catch(console.error);
+    if (activoId === id) { setVista('pipeline'); setActivoId(null); }
+  }, [activoId]);
 
-  const clienteActivo = clientes.find((c) => c.id === clienteActivoId) || null;
+  const activo = prospectos.find((p) => p.id === activoId) || null;
 
   if (cargando) {
     return (
-      <div style={{ ...S.app, alignItems: 'center', justifyContent: 'center', display: 'flex' }}>
+      <div style={{ ...SApp.app, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <style>{globalCSS}</style>
-        <div style={{ color: T.tinta60, fontFamily: T.sans }}>Abriendo carpetas de clientes…</div>
+        <div style={{ color: T.tinta60 }}>Cargando tu cartera…</div>
       </div>
     );
   }
 
   return (
-    <div style={S.app}>
+    <div style={SApp.app}>
       <style>{globalCSS}</style>
-      <TopBar
-        vista={vista}
-        clienteActivo={clienteActivo}
-        onBack={() => { setVista('lista'); setClienteActivoId(null); }}
-        guardadoEstado={guardadoEstado}
-        userEmail={user.email}
-      />
-      {vista === 'lista' && (
-        <ListaClientes
-          clientes={clientes}
-          onAbrir={(id) => { setClienteActivoId(id); setVista('ficha'); }}
-          onCrear={crearCliente}
-          onEliminar={eliminarCliente}
-        />
-      )}
-      {vista === 'ficha' && clienteActivo && (
-        <FichaCliente
-          cliente={clienteActivo}
-          onUpdate={(patch) => actualizarCliente(clienteActivo.id, patch)}
-          onIrAnalisis={() => setVista('analisis')}
-        />
-      )}
-      {vista === 'analisis' && clienteActivo && (
-        <PanelAnalisis
-          cliente={clienteActivo}
-          onUpdate={(patch) => actualizarCliente(clienteActivo.id, patch)}
-          onVolverFicha={() => setVista('ficha')}
-        />
-      )}
-    </div>
-  );
-}
 
-/* ============================================================
-   TOP BAR
-   ============================================================ */
-
-function TopBar({ vista, clienteActivo, onBack, guardadoEstado, userEmail }) {
-  return (
-    <header style={S.topbar}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        {vista !== 'lista' && (
-          <button onClick={onBack} style={S.iconBtn} aria-label="Volver">
-            <Icon name="back" size={18} />
-          </button>
-        )}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <span style={S.brandMark}>Estudio</span>
-          <span style={S.brandSub}>análisis de cobertura</span>
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        {clienteActivo && vista !== 'lista' && (
-          <span style={{ fontFamily: T.serif, fontSize: 15, color: T.tinta }}>
-            {clienteActivo.nombreCompleto || 'Cliente sin nombre'}
-          </span>
-        )}
-        <span style={{ fontSize: 11, color: guardadoEstado === 'error' ? T.terracota : T.tinta40, fontFamily: T.sans, letterSpacing: 0.3 }}>
-          {guardadoEstado === 'guardando' ? 'Guardando…' : guardadoEstado === 'error' ? 'Error al guardar' : 'Guardado'}
-        </span>
-        <span style={{ fontSize: 11.5, color: T.tinta40 }}>{userEmail}</span>
-        <button onClick={() => signOut(auth)} style={S.iconBtn} aria-label="Cerrar sesión" title="Cerrar sesión">
-          <Icon name="logout" size={15} />
-        </button>
-      </div>
-    </header>
-  );
-}
-
-/* ============================================================
-   LISTA DE CLIENTES
-   ============================================================ */
-
-function ListaClientes({ clientes, onAbrir, onCrear, onEliminar }) {
-  const [confirmarBorrado, setConfirmarBorrado] = useState(null);
-
-  return (
-    <main style={S.main}>
-      <div style={S.heroRow}>
-        <div>
-          <h1 style={S.h1}>Tu cartera, en estructura.</h1>
-          <p style={S.heroSub}>Cada cliente con su familia, sus números y qué tan cubierto está. Cargá una ficha y dejá que el análisis te diga dónde hay brecha.</p>
-        </div>
-        <button onClick={onCrear} style={S.btnPrimary}>
-          <Icon name="plus" size={17} /> Nuevo cliente
-        </button>
-      </div>
-
-      {clientes.length === 0 ? (
-        <div style={S.empty}>
-          <Icon name="family" size={32} className="empty-icon" />
-          <p style={{ fontFamily: T.serif, fontSize: 18, color: T.tinta, margin: '14px 0 6px' }}>Todavía no cargaste a nadie.</p>
-          <p style={{ color: T.tinta60, fontSize: 14, maxWidth: 380, textAlign: 'center', lineHeight: 1.5 }}>
-            Empezá por el primer cliente: su familia, su situación y lo que ya tiene cubierto. El análisis se arma solo a partir de ahí.
-          </p>
-          <button onClick={onCrear} style={{ ...S.btnPrimary, marginTop: 18 }}>
-            <Icon name="plus" size={17} /> Cargar primer cliente
-          </button>
-        </div>
-      ) : (
-        <div style={S.grid}>
-          {clientes.map((c) => {
-            const edad = calcEdad(c.fechaNacimiento);
-            const nCotiz = c.cotizaciones?.length || 0;
-            const ult = c.cotizaciones?.[c.cotizaciones.length - 1];
-            return (
-              <div key={c.id} style={S.card} onClick={() => onAbrir(c.id)}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={S.cardName}>{c.nombreCompleto || 'Sin nombre todavía'}</div>
-                    <div style={S.cardMeta}>
-                      {edad !== null ? `${edad} años` : 'Edad sin cargar'}
-                      {c.ocupacion ? ` · ${c.ocupacion}` : ''}
-                    </div>
-                  </div>
-                  <button
-                    style={S.iconBtnGhost}
-                    onClick={(e) => { e.stopPropagation(); setConfirmarBorrado(c.id); }}
-                    aria-label="Eliminar cliente"
-                  >
-                    <Icon name="trash" size={15} />
-                  </button>
-                </div>
-                <div style={S.cardDivider} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: T.tinta60, fontFamily: T.sans }}>
-                  <span>{c.hijos?.length ? `${c.hijos.length} hijo${c.hijos.length > 1 ? 's' : ''}` : 'Sin hijos cargados'}</span>
-                  <span>{nCotiz} cotización{nCotiz === 1 ? '' : 'es'}</span>
-                </div>
-                {ult && (
-                  <div style={{ marginTop: 8, fontSize: 11.5, color: T.tinta40, fontFamily: T.mono }}>
-                    última: {ult.fecha}
-                  </div>
-                )}
-
-                {confirmarBorrado === c.id && (
-                  <div style={S.confirmBox} onClick={(e) => e.stopPropagation()}>
-                    <span style={{ fontSize: 12.5, color: T.tinta }}>¿Eliminar esta ficha?</span>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button style={S.btnDanger} onClick={() => { onEliminar(c.id); setConfirmarBorrado(null); }}>Eliminar</button>
-                      <button style={S.btnGhostSm} onClick={() => setConfirmarBorrado(null)}>Cancelar</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </main>
-  );
-}
-
-/* ============================================================
-   FICHA DE CLIENTE
-   ============================================================ */
-
-const TIPOS_COMPROMISO = [
-  { value: 'educacion', label: 'Plan educativo' },
-  { value: 'credito', label: 'Crédito / hipoteca' },
-  { value: 'proyecto', label: 'Proyecto' },
-  { value: 'otro', label: 'Otro' },
-];
-
-function FichaCliente({ cliente, onUpdate, onIrAnalisis }) {
-  const set = (field, value) => onUpdate({ [field]: value });
-  const setFinanzas = (field, value) => onUpdate({ finanzas: { ...cliente.finanzas, [field]: value } });
-  const setTipoCambio = (field, value) => onUpdate({ tipoCambio: { ...cliente.tipoCambio, [field]: value } });
-  const setDeduccion = (field, value) => onUpdate({ deduccionGanancias: { ...(cliente.deduccionGanancias || {}), [field]: value } });
-
-  const segurosPrevios = cliente.segurosPrevios || [];
-  const agregarSeguroPrevio = () => onUpdate({ segurosPrevios: [...segurosPrevios, { id: uid(), compania: '', tipo: 'vida', sumaAseguradaUSD: '' }] });
-  const setSeguroPrevio = (id, field, value) => onUpdate({ segurosPrevios: segurosPrevios.map((s) => s.id === id ? { ...s, [field]: value } : s) });
-  const quitarSeguroPrevio = (id) => onUpdate({ segurosPrevios: segurosPrevios.filter((s) => s.id !== id) });
-
-  const setConyuge = (field, value) => {
-    const base = cliente.conyuge || { nombre: '', edad: '', ocupacion: '' };
-    onUpdate({ conyuge: { ...base, [field]: value } });
-  };
-  const quitarConyuge = () => onUpdate({ conyuge: null });
-  const agregarConyuge = () => onUpdate({ conyuge: { nombre: '', edad: '', ocupacion: '' } });
-
-  const agregarHijo = () => {
-    onUpdate({ hijos: [...cliente.hijos, { id: uid(), nombre: '', edad: '', escolaridad: '', planEducativo: '', notas: '' }] });
-  };
-  const setHijo = (id, field, value) => {
-    onUpdate({ hijos: cliente.hijos.map((h) => (h.id === id ? { ...h, [field]: value } : h)) });
-  };
-  const quitarHijo = (id) => onUpdate({ hijos: cliente.hijos.filter((h) => h.id !== id) });
-
-  const compromisos = cliente.compromisos || [];
-  const agregarCompromiso = () => {
-    onUpdate({ compromisos: [...compromisos, { id: uid(), tipo: 'educacion', descripcion: '', anosRestantes: '', montoAnualUSD: '', vinculadoA: '' }] });
-  };
-  const setCompromiso = (id, field, value) => {
-    onUpdate({ compromisos: compromisos.map((cm) => (cm.id === id ? { ...cm, [field]: value } : cm)) });
-  };
-  const quitarCompromiso = (id) => onUpdate({ compromisos: compromisos.filter((cm) => cm.id !== id) });
-
-  const edad = calcEdad(cliente.fechaNacimiento);
-  const ingresoNum = numOrNull(cliente.finanzas.ingresoMensual);
-  const tcNum = numOrNull(cliente.tipoCambio.valor);
-  const ingresoUSD = cliente.finanzas.monedaIngreso === 'USD'
-    ? ingresoNum
-    : (ingresoNum && tcNum ? ingresoNum / tcNum : null);
-
-  return (
-    <main style={S.main}>
-      <div style={S.fichaHeader}>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <label style={S.labelXs}>Nombre completo</label>
-          <input
-            style={S.inputHero}
-            placeholder="Nombre y apellido del cliente"
-            value={cliente.nombreCompleto}
-            onChange={(e) => set('nombreCompleto', e.target.value)}
-          />
-        </div>
-        <button style={S.btnPrimary} onClick={onIrAnalisis}>
-          <Icon name="target" size={17} /> Ver análisis
-        </button>
-      </div>
-
-      <Seccion icono="user" titulo="Datos personales">
-        <Grid cols={3}>
-          <Campo label="Fecha de nacimiento">
-            <input type="date" style={S.input} value={cliente.fechaNacimiento} onChange={(e) => set('fechaNacimiento', e.target.value)} />
-          </Campo>
-          <Campo label="Edad">
-            <div style={S.inputReadonly}>{edad !== null ? `${edad} años` : '—'}</div>
-          </Campo>
-          <Campo label="Ocupación">
-            <input style={S.input} placeholder="A qué se dedica" value={cliente.ocupacion} onChange={(e) => set('ocupacion', e.target.value)} />
-          </Campo>
-          <Campo label="Vivienda">
-            <select style={S.input} value={cliente.vivienda} onChange={(e) => set('vivienda', e.target.value)}>
-              <option value="">Sin definir</option>
-              <option value="alquila">Alquila</option>
-              <option value="propietaria">Es propietario/a</option>
-            </select>
-          </Campo>
-          <Campo label="Otras actividades" span={2}>
-            <input style={S.input} placeholder="Hobbies, actividades de riesgo, etc." value={cliente.otrasActividades} onChange={(e) => set('otrasActividades', e.target.value)} />
-          </Campo>
-        </Grid>
-      </Seccion>
-
-      <Seccion icono="family" titulo="Familia">
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={S.subTitulo}>Cónyuge / pareja</span>
-            {!cliente.conyuge ? (
-              <button style={S.btnGhostSm} onClick={agregarConyuge}><Icon name="plus" size={13} /> Agregar</button>
-            ) : (
-              <button style={S.btnGhostSm} onClick={quitarConyuge}>Quitar</button>
-            )}
-          </div>
-          {cliente.conyuge && (
-            <Grid cols={3}>
-              <Campo label="Nombre">
-                <input style={S.input} value={cliente.conyuge.nombre} onChange={(e) => setConyuge('nombre', e.target.value)} />
-              </Campo>
-              <Campo label="Edad">
-                <input type="number" style={S.input} value={cliente.conyuge.edad} onChange={(e) => setConyuge('edad', e.target.value)} />
-              </Campo>
-              <Campo label="Ocupación">
-                <input style={S.input} value={cliente.conyuge.ocupacion} onChange={(e) => setConyuge('ocupacion', e.target.value)} />
-              </Campo>
-            </Grid>
+      {/* Top bar */}
+      <header style={SApp.topbar}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {vista !== 'pipeline' && (
+            <button onClick={() => { setVista('pipeline'); setActivoId(null); }} style={SApp.iconBtn}>
+              <Icon name="back" size={17} />
+            </button>
+          )}
+          <span style={SApp.brandMark}>Estudio</span>
+          {activo && vista !== 'pipeline' && (
+            <>
+              <span style={{ color: T.tinta40, fontSize: 14 }}>›</span>
+              <span style={{ fontFamily: T.serif, fontSize: 15 }}>{activo.nombre || 'Sin nombre'}</span>
+              {vista === 'analisis' && (
+                <>
+                  <span style={{ color: T.tinta40, fontSize: 14 }}>›</span>
+                  <span style={{ fontSize: 13, color: T.tinta60 }}>Análisis</span>
+                </>
+              )}
+            </>
           )}
         </div>
-
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={S.subTitulo}>Hijos</span>
-            <button style={S.btnGhostSm} onClick={agregarHijo}><Icon name="plus" size={13} /> Agregar hijo/a</button>
-          </div>
-          {cliente.hijos.length === 0 && <p style={S.vacioMsg}>Sin hijos cargados.</p>}
-          {cliente.hijos.map((h, i) => (
-            <div key={h.id} style={S.hijoCard}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: T.tinta40, fontFamily: T.mono }}>HIJO/A {i + 1}</span>
-                <button style={S.iconBtnGhost} onClick={() => quitarHijo(h.id)}><Icon name="trash" size={14} /></button>
-              </div>
-              <Grid cols={4}>
-                <Campo label="Nombre">
-                  <input style={S.input} value={h.nombre} onChange={(e) => setHijo(h.id, 'nombre', e.target.value)} />
-                </Campo>
-                <Campo label="Edad">
-                  <input type="number" style={S.input} value={h.edad} onChange={(e) => setHijo(h.id, 'edad', e.target.value)} />
-                </Campo>
-                <Campo label="Escolaridad">
-                  <select style={S.input} value={h.escolaridad} onChange={(e) => setHijo(h.id, 'escolaridad', e.target.value)}>
-                    <option value="">Sin definir</option>
-                    <option value="publica">Pública</option>
-                    <option value="privada">Privada</option>
-                    <option value="universidad">Universidad</option>
-                    <option value="no-escolar">No escolarizado aún</option>
-                  </select>
-                </Campo>
-                <Campo label="Plan educativo">
-                  <input style={S.input} placeholder="Universidad, intercambio…" value={h.planEducativo} onChange={(e) => setHijo(h.id, 'planEducativo', e.target.value)} />
-                </Campo>
-              </Grid>
-            </div>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {vista === 'ficha' && activo && (
+            <button style={SApp.btnPrimary} onClick={() => setVista('analisis')}>
+              <Icon name="target" size={15} /> Ver análisis
+            </button>
+          )}
+          {vista === 'analisis' && activo && (
+            <button style={SApp.btnGhost} onClick={() => setVista('ficha')}>
+              <Icon name="edit" size={14} /> Editar ficha
+            </button>
+          )}
+          <span style={{ fontSize: 11, color: guardadoEstado === 'error' ? T.terracota : T.tinta40 }}>
+            {guardadoEstado === 'guardando' ? 'Guardando…' : guardadoEstado === 'error' ? 'Error al guardar' : 'Guardado'}
+          </span>
+          <span style={{ fontSize: 11.5, color: T.tinta40 }}>{user.email}</span>
+          <button onClick={() => signOut(auth)} style={SApp.iconBtn} title="Cerrar sesión">
+            <Icon name="logout" size={15} />
+          </button>
         </div>
-      </Seccion>
+      </header>
 
-      <Seccion icono="clock" titulo="Compromisos en el tiempo">
-        <p style={{ fontSize: 13, color: T.tinta60, marginTop: -6, marginBottom: 16, lineHeight: 1.5 }}>
-          Todo lo que el cliente quiere sostener durante varios años más — la universidad de un hijo, un crédito, un proyecto — suma a la suma asegurada ideal mientras ese compromiso siga vigente. Así el análisis refleja no solo el ingreso de hoy, sino lo que la familia necesita sostener en el tiempo.
-        </p>
-        {compromisos.length === 0 && <p style={S.vacioMsg}>Sin compromisos cargados todavía.</p>}
-        {compromisos.map((cm, i) => (
-          <div key={cm.id} style={S.hijoCard}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: T.tinta40, fontFamily: T.mono }}>COMPROMISO {i + 1}</span>
-              <button style={S.iconBtnGhost} onClick={() => quitarCompromiso(cm.id)}><Icon name="trash" size={14} /></button>
-            </div>
-            <Grid cols={4}>
-              <Campo label="Tipo">
-                <select style={S.input} value={cm.tipo} onChange={(e) => setCompromiso(cm.id, 'tipo', e.target.value)}>
-                  {TIPOS_COMPROMISO.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-              </Campo>
-              <Campo label="Descripción">
-                <input style={S.input} placeholder="Ej: Universidad de Manuel" value={cm.descripcion} onChange={(e) => setCompromiso(cm.id, 'descripcion', e.target.value)} />
-              </Campo>
-              <Campo label="Años restantes">
-                <input type="number" style={S.input} placeholder="Ej: 15" value={cm.anosRestantes} onChange={(e) => setCompromiso(cm.id, 'anosRestantes', e.target.value)} />
-              </Campo>
-              <Campo label="Costo anual estimado (USD)">
-                <input type="number" style={S.input} placeholder="Ej: 4000" value={cm.montoAnualUSD} onChange={(e) => setCompromiso(cm.id, 'montoAnualUSD', e.target.value)} />
-              </Campo>
-            </Grid>
-          </div>
-        ))}
-        <button style={{ ...S.btnGhostSm, marginTop: 4 }} onClick={agregarCompromiso}>
-          <Icon name="plus" size={13} /> Agregar compromiso
-        </button>
-      </Seccion>
-
-      <Seccion icono="edit" titulo="Proyectos">
-        <Grid cols={2}>
-          <Campo label="Proyectos actuales">
-            <textarea style={S.textarea} value={cliente.proyectosActuales} onChange={(e) => set('proyectosActuales', e.target.value)} />
-          </Campo>
-          <Campo label="Proyectos futuros">
-            <textarea style={S.textarea} value={cliente.proyectosFuturos} onChange={(e) => set('proyectosFuturos', e.target.value)} />
-          </Campo>
-        </Grid>
-      </Seccion>
-
-      <Seccion icono="coin" titulo="Situación financiera">
-        <Grid cols={3}>
-          <Campo label="Ingreso mensual">
-            <div style={S.inputConSelector}>
-              <input type="number" style={S.inputSinBorde} value={cliente.finanzas.ingresoMensual} onChange={(e) => setFinanzas('ingresoMensual', e.target.value)} />
-              <select style={S.selectorInline} value={cliente.finanzas.monedaIngreso} onChange={(e) => setFinanzas('monedaIngreso', e.target.value)}>
-                <option value="ARS">ARS</option>
-                <option value="USD">USD</option>
-              </select>
-            </div>
-          </Campo>
-          <Campo label="Gasto mensual">
-            <input type="number" style={S.input} value={cliente.finanzas.gastoMensual} onChange={(e) => setFinanzas('gastoMensual', e.target.value)} />
-          </Campo>
-          <Campo label="Prima máxima mensual (opcional)">
-            <input type="number" style={S.input} placeholder="Si vacío, se usa 10% del ingreso" value={cliente.finanzas.primaMaxima} onChange={(e) => setFinanzas('primaMaxima', e.target.value)} />
-          </Campo>
-          <Campo label="Ahorros">
-            <input style={S.input} value={cliente.finanzas.ahorros} onChange={(e) => setFinanzas('ahorros', e.target.value)} />
-          </Campo>
-          <Campo label="Inversiones">
-            <input style={S.input} value={cliente.finanzas.inversiones} onChange={(e) => setFinanzas('inversiones', e.target.value)} />
-          </Campo>
-          <Campo label="Otros seguros">
-            <input style={S.input} placeholder="Compañía y cobertura" value={cliente.finanzas.otrosSeguros} onChange={(e) => setFinanzas('otrosSeguros', e.target.value)} />
-          </Campo>
-          <Campo label="Créditos activos">
-            <input style={S.input} value={cliente.finanzas.creditosActivos} onChange={(e) => setFinanzas('creditosActivos', e.target.value)} />
-          </Campo>
-          <Campo label="Deudas">
-            <input style={S.input} value={cliente.finanzas.deudas} onChange={(e) => setFinanzas('deudas', e.target.value)} />
-          </Campo>
-        </Grid>
-      </Seccion>
-
-      <Seccion icono="coin" titulo="Dolarización">
-        <Grid cols={3}>
-          <Campo label="Tipo de cambio del día (oficial mayorista)">
-            <input type="number" style={S.input} placeholder="Ej: 1450" value={cliente.tipoCambio.valor} onChange={(e) => setTipoCambio('valor', e.target.value)} />
-          </Campo>
-          <Campo label="Fecha del tipo de cambio">
-            <input type="date" style={S.input} value={cliente.tipoCambio.fecha} onChange={(e) => setTipoCambio('fecha', e.target.value)} />
-          </Campo>
-          <Campo label="Ingreso mensual en USD">
-            <div style={S.inputReadonly}>{fmtUSD(ingresoUSD)}</div>
-          </Campo>
-        </Grid>
-        {cliente.finanzas.monedaIngreso === 'ARS' && !tcNum && (
-          <p style={{ ...S.vacioMsg, color: T.terracota, marginTop: 10 }}>
-            <Icon name="alert" size={13} /> Cargá el tipo de cambio para poder dolarizar el ingreso y comparar contra las cotizaciones.
-          </p>
+      {/* Contenido */}
+      <div style={SApp.body}>
+        {vista === 'pipeline' && (
+          <Pipeline
+            prospectos={prospectos}
+            onAbrir={(id) => { setActivoId(id); setVista('ficha'); }}
+            onCreate={crearProspecto}
+            onUpdate={(id, patch) => persistir(id, patch)}
+            onEliminar={eliminarP}
+          />
         )}
-      </Seccion>
-
-      <Seccion icono="check" titulo="Seguros vigentes (otras compañías)">
-        <p style={{ fontSize: 13, color: T.tinta60, marginTop: -6, marginBottom: 16, lineHeight: 1.5 }}>
-          Coberturas que el cliente ya tiene antes de tu propuesta. Se suman al análisis y se muestran en un color diferente para distinguir qué aportás vos y qué ya tenía.
-        </p>
-        {segurosPrevios.length === 0 && <p style={S.vacioMsg}>Sin seguros previos cargados.</p>}
-        {segurosPrevios.map((s, i) => (
-          <div key={s.id} style={S.hijoCard}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: T.tinta40, fontFamily: T.mono }}>SEGURO PREVIO {i + 1}</span>
-              <button style={S.iconBtnGhost} onClick={() => quitarSeguroPrevio(s.id)}><Icon name="trash" size={14} /></button>
-            </div>
-            <Grid cols={3}>
-              <Campo label="Compañía">
-                <input style={S.input} placeholder="Ej: SANCOR, Prudential" value={s.compania} onChange={(e) => setSeguroPrevio(s.id, 'compania', e.target.value)} />
-              </Campo>
-              <Campo label="Tipo de cobertura">
-                <select style={S.input} value={s.tipo} onChange={(e) => setSeguroPrevio(s.id, 'tipo', e.target.value)}>
-                  <option value="vida">Vida / fallecimiento</option>
-                  <option value="itp">Invalidez total y permanente</option>
-                  <option value="enfermedadesCriticas">Enfermedades críticas</option>
-                  <option value="muerteAccidental">Muerte accidental</option>
-                  <option value="otro">Otro</option>
-                </select>
-              </Campo>
-              <Campo label="Suma asegurada (USD)">
-                <input type="number" style={S.input} placeholder="Ej: 50000" value={s.sumaAseguradaUSD} onChange={(e) => setSeguroPrevio(s.id, 'sumaAseguradaUSD', e.target.value)} />
-              </Campo>
-            </Grid>
-          </div>
-        ))}
-        <button style={{ ...S.btnGhostSm, marginTop: 4 }} onClick={agregarSeguroPrevio}>
-          <Icon name="plus" size={13} /> Agregar seguro previo
-        </button>
-      </Seccion>
-
-      <Seccion icono="coin" titulo="Deducción de Ganancias">
-        <p style={{ fontSize: 13, color: T.tinta60, marginTop: -6, marginBottom: 16, lineHeight: 1.5 }}>
-          Los topes anuales de deducción se actualizan por AFIP/ARCA cada período fiscal, así que quedan a tu criterio cargarlos con el valor vigente. Si los completás, el PDF para el cliente va a incluir esta ventaja como parte del análisis.
-        </p>
-        <Grid cols={3}>
-          <Campo label="Tope anual — Vida con ahorro (ARS)">
-            <input type="number" style={S.input} placeholder="Ej: 1500000" value={cliente.deduccionGanancias?.topeVidaYAhorro || ''} onChange={(e) => setDeduccion('topeVidaYAhorro', e.target.value)} />
-          </Campo>
-          <Campo label="Tope anual — Vida puro (ARS)">
-            <input type="number" style={S.input} placeholder="Ej: 1500000" value={cliente.deduccionGanancias?.topeVidaPuro || ''} onChange={(e) => setDeduccion('topeVidaPuro', e.target.value)} />
-          </Campo>
-          <Campo label="Tope anual — Retiro (ARS)">
-            <input type="number" style={S.input} placeholder="Ej: 1500000" value={cliente.deduccionGanancias?.topeRetiro || ''} onChange={(e) => setDeduccion('topeRetiro', e.target.value)} />
-          </Campo>
-        </Grid>
-      </Seccion>
-
-      <Seccion icono="edit" titulo="Notas">
-        <textarea style={{ ...S.textarea, minHeight: 80 }} placeholder="Cualquier contexto que quieras recordar para la próxima reunión" value={cliente.notas} onChange={(e) => set('notas', e.target.value)} />
-      </Seccion>
-    </main>
-  );
-}
-
-function Seccion({ icono, titulo, children }) {
-  return (
-    <section style={S.seccion}>
-      <div style={S.seccionHeader}>
-        <Icon name={icono} size={16} className="seccion-icon" />
-        <h2 style={S.seccionTitulo}>{titulo}</h2>
+        {vista === 'ficha' && activo && (
+          <FichaProspecto
+            prospecto={activo}
+            onUpdate={(patch) => persistir(activo.id, patch)}
+            onVolver={() => { setVista('pipeline'); setActivoId(null); }}
+            onIrAnalisis={() => setVista('analisis')}
+          />
+        )}
+        {vista === 'analisis' && activo && (
+          <PanelAnalisis
+            prospecto={activo}
+            onUpdate={(patch) => persistir(activo.id, patch)}
+            onVolverFicha={() => setVista('ficha')}
+          />
+        )}
       </div>
-      {children}
-    </section>
-  );
-}
-
-function Grid({ cols, children }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: '14px 16px' }}>{children}</div>;
-}
-
-function Campo({ label, span, children }) {
-  return (
-    <div style={span ? { gridColumn: `span ${span}` } : undefined}>
-      <label style={S.labelXs}>{label}</label>
-      {children}
     </div>
   );
 }
 
-/* ============================================================
-   PANEL DE ANÁLISIS
-   ============================================================ */
-
-// Calcula cuánto suman los compromisos vigentes dentro del horizonte de
-// referencia (3 a 5 años desde hoy). Un compromiso con anosRestantes=15 y
-// montoAnualUSD=4000 aporta su monto anual completo a cada uno de los años
-// del horizonte que todavía está vigente (porque en todos esos años el
-// cliente seguiría necesitando sostenerlo si faltara).
-function calcularAporteCompromisos(compromisos, horizonteAnios) {
-  let total = 0;
-  for (const cm of compromisos || []) {
-    const anios = numOrNull(cm.anosRestantes);
-    const monto = numOrNull(cm.montoAnualUSD);
-    if (!anios || !monto) continue;
-    const aniosVigentesEnHorizonte = Math.min(anios, horizonteAnios);
-    if (aniosVigentesEnHorizonte > 0) total += monto * aniosVigentesEnHorizonte;
-  }
-  return total;
-}
-
-function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
+function PanelAnalisis({ prospecto, onUpdate, onVolverFicha }) {
   const [mostrarCarga, setMostrarCarga] = useState(false);
   const [generandoPDF, setGenerandoPDF] = useState(false);
   const [primaDiscriminada, setPrimaDiscriminada] = useState(false);
 
-  const ingresoNum = numOrNull(cliente.finanzas.ingresoMensual);
-  const tcNum = numOrNull(cliente.tipoCambio.valor);
-  const ingresoMensualUSD = cliente.finanzas.monedaIngreso === 'USD'
+  const ingresoNum = numOrNull(prospecto.finanzas.ingresoMensual);
+  const tcNum = numOrNull(prospecto.tipoCambio.valor);
+  const ingresoMensualUSD = prospecto.finanzas.monedaIngreso === 'USD'
     ? ingresoNum
     : (ingresoNum && tcNum ? ingresoNum / tcNum : null);
   const ingresoAnualUSD = ingresoMensualUSD ? ingresoMensualUSD * 12 : null;
 
-  const compromisos = cliente.compromisos || [];
+  const compromisos = prospecto.compromisos || [];
   const aporteCompromisosMin = ingresoAnualUSD ? calcularAporteCompromisos(compromisos, 3) : 0;
   const aporteCompromisosMax = ingresoAnualUSD ? calcularAporteCompromisos(compromisos, 5) : 0;
   const aporteCompromisosCentro = ingresoAnualUSD ? calcularAporteCompromisos(compromisos, 4) : 0;
@@ -707,20 +254,20 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
 
   const tieneCompromisosRelevantes = compromisos.some((cm) => numOrNull(cm.anosRestantes) && numOrNull(cm.montoAnualUSD));
 
-  const primaTope = numOrNull(cliente.finanzas.primaMaxima) || (ingresoMensualUSD ? ingresoMensualUSD * 0.1 : null);
+  const primaTope = numOrNull(prospecto.finanzas.primaMaxima) || (ingresoMensualUSD ? ingresoMensualUSD * 0.1 : null);
 
-  const totales = sumarCoberturas(cotizacionesDe(cliente));
+  const totales = sumarCoberturas(cotizacionesDe(prospecto));
 
   // Totales de seguros previos (otras compañías) — se suman al análisis pero
   // se muestran en color diferente en las barras.
-  const segurosPrevios = cliente.segurosPrevios || [];
+  const segurosPrevios = prospecto.segurosPrevios || [];
   const totalesPrevios = { vida: 0, itp: 0, enfermedadesCriticas: 0, muerteAccidental: 0 };
   for (const s of segurosPrevios) {
     const monto = numOrNull(s.sumaAseguradaUSD) || 0;
     if (totalesPrevios[s.tipo] !== undefined) totalesPrevios[s.tipo] += monto;
   }
   const tienePrevios = segurosPrevios.length > 0 && Object.values(totalesPrevios).some((v) => v > 0);
-  const primaMensualTotal = cotizacionesDe(cliente).reduce((acc, c) => acc + (c.primaMensualUSD || 0), 0);
+  const primaMensualTotal = cotizacionesDe(prospecto).reduce((acc, c) => acc + (c.primaMensualUSD || 0), 0);
 
   const vidaTotal = totales.vida + totalesPrevios.vida;
   const itpTotal = totales.itp + totalesPrevios.itp;
@@ -734,12 +281,12 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
   const pctPrima = primaTope ? (primaMensualTotal / primaTope) * 100 : null;
 
   const agregarCotizacion = (cotizacion) => {
-    onUpdate({ cotizaciones: [...cotizacionesDe(cliente), cotizacion] });
+    onUpdate({ cotizaciones: [...cotizacionesDe(prospecto), cotizacion] });
     setMostrarCarga(false);
   };
 
   const quitarCotizacion = (id) => {
-    onUpdate({ cotizaciones: cotizacionesDe(cliente).filter((c) => c.id !== id) });
+    onUpdate({ cotizaciones: cotizacionesDe(prospecto).filter((c) => c.id !== id) });
   };
 
   const datosListos = ingresoMensualUSD !== null;
@@ -748,19 +295,19 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
     <main style={S.main}>
       <div style={S.fichaHeader}>
         <div>
-          <h1 style={S.h1}>{cliente.nombreCompleto || 'Cliente sin nombre'}</h1>
+          <h1 style={S.h1}>{prospecto.nombreCompleto || 'Cliente sin nombre'}</h1>
           <p style={S.heroSub}>
-            {calcEdad(cliente.fechaNacimiento) !== null ? `${calcEdad(cliente.fechaNacimiento)} años · ` : ''}
-            {cliente.ocupacion || 'Sin ocupación cargada'}
+            {calcEdad(prospecto.fechaNacimiento) !== null ? `${calcEdad(prospecto.fechaNacimiento)} años · ` : ''}
+            {prospecto.ocupacion || 'Sin ocupación cargada'}
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
           <div style={{ display: 'flex', gap: 10 }}>
             <button style={S.btnGhostSm} onClick={onVolverFicha}><Icon name="edit" size={14} /> Editar ficha</button>
             <button
-              style={{ ...S.btnPrimary, opacity: datosListos && cotizacionesDe(cliente).length > 0 ? 1 : 0.5 }}
-              disabled={!datosListos || cotizacionesDe(cliente).length === 0 || generandoPDF}
-              onClick={() => generarPDFCliente(cliente, { sumaIdealMin, sumaIdealMax, sumaIdealCentro, primaTope, totales, totalesPrevios, tienePrevios, primaMensualTotal, pctCobertura, pctPrima, ingresoAnualUSD, ingresoMensualUSD, aporteCompromisosCentro, tieneCompromisosRelevantes, primaDiscriminada }, setGenerandoPDF)}
+              style={{ ...S.btnPrimary, opacity: datosListos && cotizacionesDe(prospecto).length > 0 ? 1 : 0.5 }}
+              disabled={!datosListos || cotizacionesDe(prospecto).length === 0 || generandoPDF}
+              onClick={() => generarPDFCliente(prospecto, { sumaIdealMin, sumaIdealMax, sumaIdealCentro, primaTope, totales, totalesPrevios, tienePrevios, primaMensualTotal, pctCobertura, pctPrima, ingresoAnualUSD, ingresoMensualUSD, aporteCompromisosCentro, tieneCompromisosRelevantes, primaDiscriminada }, setGenerandoPDF)}
             >
               <Icon name="download" size={16} /> {generandoPDF ? 'Generando…' : 'Descargar PDF'}
             </button>
@@ -775,7 +322,7 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
       {!datosListos && (
         <div style={S.avisoFalta}>
           <Icon name="alert" size={16} />
-          <span>Faltan datos para calcular: cargá el ingreso mensual y el tipo de cambio en la ficha del cliente.</span>
+          <span>Faltan datos para calcular: cargá el ingreso mensual y el tipo de cambio en la ficha del prospecto.</span>
           <button style={{ ...S.btnGhostSm, marginLeft: 'auto' }} onClick={onVolverFicha}>Completar ficha</button>
         </div>
       )}
@@ -871,8 +418,8 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
             )}
 
             {/* Detalle del plan de retiro con doble tasa */}
-            {cotizacionesDe(cliente).some((c) => c.fuente === 'origenes') && (() => {
-              const cotRetiro = cotizacionesDe(cliente).find((c) => c.fuente === 'origenes');
+            {cotizacionesDe(prospecto).some((c) => c.fuente === 'origenes') && (() => {
+              const cotRetiro = cotizacionesDe(prospecto).find((c) => c.fuente === 'origenes');
               const cobRetiro = cotRetiro?.coberturas?.find((c) => c.tipo === 'fondoRetiro' && c.extra);
               if (!cobRetiro?.extra) return null;
               const ex = cobRetiro.extra;
@@ -948,8 +495,8 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
           )}
 
           <Seccion icono="file" titulo="Cotizaciones cargadas">
-            {cotizacionesDe(cliente).length === 0 && <p style={S.vacioMsg}>Todavía no cargaste ninguna cotización para este cliente.</p>}
-            {cotizacionesDe(cliente).map((c) => (
+            {cotizacionesDe(prospecto).length === 0 && <p style={S.vacioMsg}>Todavía no cargaste ninguna cotización para este prospecto.</p>}
+            {cotizacionesDe(prospecto).map((c) => (
               <div key={c.id} style={S.cotizCard}>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.fuente === 'life' ? 'Life Seguros' : c.fuente === 'origenes' ? 'Orígenes Retiro' : 'Carga manual'}</div>
@@ -979,7 +526,7 @@ function PanelAnalisis({ cliente, onUpdate, onVolverFicha }) {
   );
 }
 
-const cotizacionesDe = (cliente) => cliente.cotizaciones || [];
+const cotizacionesDe = (prospecto) => prospecto.cotizaciones || [];
 
 function sumarCoberturas(cotizaciones) {
   const acc = { vida: 0, itp: 0, enfermedadesCriticas: 0, muerteAccidental: 0, fondoRetiro: 0 };
@@ -1450,13 +997,13 @@ function parsearOrigenes(texto) {
    ANÁLISIS NARRATIVO — etapa de vida, faltantes, deducción
    ============================================================ */
 
-function calcularEtapaDeVida(cliente, edad) {
-  const tieneHijosChicos = (cliente.hijos || []).some((h) => numOrNull(h.edad) !== null && numOrNull(h.edad) < 18);
-  const tieneHijosUniv = (cliente.hijos || []).some((h) => h.escolaridad === 'universidad' || (numOrNull(h.edad) !== null && numOrNull(h.edad) >= 18));
-  const tieneConyuge = !!cliente.conyuge;
-  const tieneCredito = !!(cliente.finanzas?.creditosActivos && cliente.finanzas.creditosActivos.trim());
+function calcularEtapaDeVida(prospecto, edad) {
+  const tieneHijosChicos = (prospecto.hijos || []).some((h) => numOrNull(h.edad) !== null && numOrNull(h.edad) < 18);
+  const tieneHijosUniv = (prospecto.hijos || []).some((h) => h.escolaridad === 'universidad' || (numOrNull(h.edad) !== null && numOrNull(h.edad) >= 18));
+  const tieneConyuge = !!prospecto.conyuge;
+  const tieneCredito = !!(prospecto.finanzas?.creditosActivos && prospecto.finanzas.creditosActivos.trim());
 
-  if (edad !== null && edad < 30 && !tieneConyuge && (cliente.hijos || []).length === 0) {
+  if (edad !== null && edad < 30 && !tieneConyuge && (prospecto.hijos || []).length === 0) {
     return 'Estás construyendo las bases de tu vida adulta — esta es la etapa donde una protección se contrata más barata y se sostiene por más años, justamente porque la edad todavía juega a tu favor.';
   }
   if (tieneHijosChicos) {
@@ -1491,8 +1038,8 @@ function calcularFaltantes(totales, finanzas) {
   return faltantes;
 }
 
-function calcularDeduccion(cliente, calc) {
-  const dg = cliente.deduccionGanancias || {};
+function calcularDeduccion(prospecto, calc) {
+  const dg = prospecto.deduccionGanancias || {};
   const items = [];
   if (numOrNull(dg.topeVidaYAhorro)) items.push({ nombre: 'Seguro de vida con ahorro', tope: numOrNull(dg.topeVidaYAhorro) });
   if (numOrNull(dg.topeVidaPuro)) items.push({ nombre: 'Seguro de vida puro', tope: numOrNull(dg.topeVidaPuro) });
@@ -1504,7 +1051,7 @@ function calcularDeduccion(cliente, calc) {
    GENERACIÓN DE PDF PARA EL CLIENTE
    ============================================================ */
 
-async function generarPDFCliente(cliente, calc, setGenerando) {
+async function generarPDFCliente(prospecto, calc, setGenerando) {
   setGenerando(true);
   try {
     if (!window.jspdf) {
@@ -1526,8 +1073,8 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     const colPapel2 = [244, 240, 230];
     const colBorde = [200, 196, 186];
 
-    const edad = calcEdad(cliente.fechaNacimiento);
-    const nombrePila = (cliente.nombreCompleto || 'tu cliente').split(' ')[0];
+    const edad = calcEdad(prospecto.fechaNacimiento);
+    const nombrePila = (prospecto.nombreCompleto || 'tu prospecto').split(' ')[0];
 
     const nuevaPagina = () => {
       doc.addPage();
@@ -1567,7 +1114,7 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     doc.text('Análisis de cobertura', M, 44);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(12);
-    doc.text(cliente.nombreCompleto || 'Cliente', M, 68);
+    doc.text(prospecto.nombreCompleto || 'Cliente', M, 68);
     doc.setFontSize(9);
     doc.setTextColor(220, 220, 215);
     doc.text(`Preparado por Johanna Schittino · Life Advisor · ${new Date().toLocaleDateString('es-AR')}`, M, 88);
@@ -1582,7 +1129,7 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
 
     // ---------- Etapa de vida ----------
     encabezadoSeccion('Tu momento');
-    parrafo(calcularEtapaDeVida(cliente, edad), { marginBottom: 4 });
+    parrafo(calcularEtapaDeVida(prospecto, edad), { marginBottom: 4 });
     parrafo(
       'Hoy es el mejor momento para contratar: cada año que pasa, la cobertura cuesta más y tu margen para decidir con calma es más chico. Adelantarte ahora es la forma más simple de pagar menos por más años de protección.',
       { color: colGris, size: 9.5, marginBottom: 18 }
@@ -1699,14 +1246,14 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     }
 
     // Seguros previos — mención en texto
-    if (calc.tienePrevios && (cliente.segurosPrevios || []).length > 0) {
-      asegurarEspacio(20 + cliente.segurosPrevios.length * 15);
+    if (calc.tienePrevios && (prospecto.segurosPrevios || []).length > 0) {
+      asegurarEspacio(20 + prospecto.segurosPrevios.length * 15);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(...colTinta);
       doc.text('Seguros vigentes de otras compañías', M, y);
       y += 14;
-      (cliente.segurosPrevios || []).forEach((s) => {
+      (prospecto.segurosPrevios || []).forEach((s) => {
         const monto = numOrNull(s.sumaAseguradaUSD);
         if (!monto) return;
         asegurarEspacio(15);
@@ -1748,7 +1295,7 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     y += 8;
 
     // ---------- Detalle plan de retiro ----------
-    const cotRetiro = (cliente.cotizaciones || []).find((c) => c.fuente === 'origenes');
+    const cotRetiro = (prospecto.cotizaciones || []).find((c) => c.fuente === 'origenes');
     const cobRetiro = cotRetiro?.coberturas?.find((c) => c.tipo === 'fondoRetiro' && c.extra);
     if (cobRetiro?.extra) {
       const ex = cobRetiro.extra;
@@ -1787,9 +1334,9 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     encabezadoSeccion('Tu inversión mensual');
     parrafo(`Tope recomendado: hasta el 10% de tu ingreso mensual, equivalente a ${fmtUSD(calc.primaTope)}.`, { color: colGris, size: 10, marginBottom: 6 });
 
-    if (calc.primaDiscriminada && (cliente.cotizaciones || []).length > 1) {
+    if (calc.primaDiscriminada && (prospecto.cotizaciones || []).length > 1) {
       // Mostrar desglose por producto
-      (cliente.cotizaciones || []).forEach((cot) => {
+      (prospecto.cotizaciones || []).forEach((cot) => {
         asegurarEspacio(17);
         const nombreProd = cot.fuente === 'life' ? 'Life Seguros — seguro de vida' : cot.fuente === 'origenes' ? 'Orígenes — plan de retiro' : (cot.archivoNombre || 'Otro producto');
         doc.setFont('helvetica', 'normal');
@@ -1816,7 +1363,7 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     if (calc.tieneCompromisosRelevantes) {
       encabezadoSeccion('Lo que estás construyendo en el tiempo');
       parrafo('Más allá de tu ingreso de hoy, esto es lo que tu plan está acompañando a futuro:', { color: colGris, size: 9.5, marginBottom: 8 });
-      for (const cm of cliente.compromisos || []) {
+      for (const cm of prospecto.compromisos || []) {
         const anios = numOrNull(cm.anosRestantes);
         const monto = numOrNull(cm.montoAnualUSD);
         if (!anios || !monto) continue;
@@ -1833,7 +1380,7 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     }
 
     // ---------- Deducción de Ganancias ----------
-    const itemsDeduccion = calcularDeduccion(cliente, calc);
+    const itemsDeduccion = calcularDeduccion(prospecto, calc);
     if (itemsDeduccion.length > 0) {
       encabezadoSeccion('Un beneficio adicional: deducción de Ganancias');
       parrafo(
@@ -1854,7 +1401,7 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
     }
 
     // ---------- Lo que podés sumar ----------
-    const faltantes = calcularFaltantes(calc.totales, cliente.finanzas);
+    const faltantes = calcularFaltantes(calc.totales, prospecto.finanzas);
     if (faltantes.length > 0) {
       encabezadoSeccion('Lo que podés sumar a tu plan');
       faltantes.forEach((f) => {
@@ -1889,7 +1436,7 @@ async function generarPDFCliente(cliente, calc, setGenerando) {
       doc.text(`${p} / ${totalPaginas}`, W - M, H - 40, { align: 'right' });
     }
 
-    const nombreArchivo = `Analisis-${(cliente.nombreCompleto || 'cliente').replace(/\s+/g, '-')}-${todayISO()}.pdf`;
+    const nombreArchivo = `Analisis-${(prospecto.nombreCompleto || 'prospecto').replace(/\s+/g, '-')}-${todayISO()}.pdf`;
     doc.save(nombreArchivo);
   } catch (e) {
     alert('No se pudo generar el PDF: ' + e.message);
@@ -1984,4 +1531,14 @@ const S = {
   errorBox: { display: 'flex', alignItems: 'center', gap: 8, background: T.terracotaSoft, color: T.terracota, borderRadius: 9, padding: '10px 14px', fontSize: 13, marginTop: 14, flexWrap: 'wrap' },
 
   coberturaRow: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 },
+};
+
+const SApp = {
+  app: { height: '100vh', display: 'flex', flexDirection: 'column', background: T.papel, fontFamily: T.sans, color: T.tinta, overflow: 'hidden' },
+  topbar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 24px', borderBottom: `1px solid ${T.borde}`, background: 'rgba(251,249,244,0.95)', backdropFilter: 'blur(8px)', zIndex: 10, flexShrink: 0 },
+  brandMark: { fontFamily: T.serif, fontSize: 18, fontWeight: 600, letterSpacing: -0.2 },
+  body: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  iconBtn: { background: 'none', border: `1px solid ${T.borde}`, borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.tinta, cursor: 'pointer' },
+  btnPrimary: { display: 'flex', alignItems: 'center', gap: 6, background: T.tinta, color: T.papel, border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  btnGhost: { display: 'flex', alignItems: 'center', gap: 6, background: 'none', color: T.tinta, border: `1px solid ${T.borde}`, borderRadius: 8, padding: '7px 14px', fontSize: 13, cursor: 'pointer' },
 };
