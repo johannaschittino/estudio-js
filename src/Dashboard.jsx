@@ -318,11 +318,11 @@ export default function Dashboard({ prospectos }) {
                 {objMes.prima && (
                   <div style={{ marginTop: 12 }}>
                     <div style={{ height: 8, background: T.papel2, borderRadius: 5, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 5, background: primaAnualMes >= Number(objMes.prima) ? '#2D5016' : T.dorado, width: `${Math.min(100, (primaAnualMes / Number(objMes.prima)) * 100)}%`, transition: 'width 0.4s' }} />
+                      <div style={{ height: '100%', borderRadius: 5, background: primaVidaMes >= Number(objMes.prima) ? '#2D5016' : T.dorado, width: `${Math.min(100, (primaVidaMes / Number(objMes.prima)) * 100)}%`, transition: 'width 0.4s' }} />
                     </div>
                     <div style={{ fontSize: 12, color: T.tinta40, marginTop: 4 }}>
-                      {fmtPct((primaAnualMes / Number(objMes.prima)) * 100)} del objetivo mensual
-                      {primaAnualMes < Number(objMes.prima) && ` · Faltan ${fmtUSD(Number(objMes.prima) - primaAnualMes)}`}
+                      {fmtPct((primaVidaMes / Number(objMes.prima)) * 100)} del objetivo mensual
+                      {primaVidaMes < Number(objMes.prima) && ` · Faltan ${fmtUSD(Number(objMes.prima) - primaVidaMes)}`}
                     </div>
                   </div>
                 )}
@@ -404,6 +404,7 @@ const CAV_LLAVES_DEFAULT = [
   { id: 'retiro', label: 'Planes de retiro', meta: '' },
   { id: 'salud', label: 'Seguros de salud', meta: '' },
   { id: 'clientes_nuevos', label: 'Clientes nuevos', meta: '' },
+  { id: 'total_operaciones', label: 'Total de operaciones', meta: '' },
 ];
 
 function cargarCAV() {
@@ -422,6 +423,7 @@ function IncentivoBloqueCAV({ cerrados, polizasVida, endosos, polizasRetiro, pol
     retiro: polizasRetiro,
     salud: polizasSalud,
     clientes_nuevos: clientesNuevos,
+    total_operaciones: polizasVida + endosos + polizasRetiro + polizasSalud,
   };
 
   const fmtActual = (id) => {
