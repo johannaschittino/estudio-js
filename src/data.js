@@ -73,6 +73,14 @@ export const nuevoProspecto = () => ({
   grupoFamiliarId: null,
   // IDs de prospectos vinculados (cónyuge, hijos mayores, etc.)
   vinculados: [],  // [{ id, relacion: 'conyuge'|'hijo'|'padre'|'otro', nombre }]
+  // Datos del cierre — se completan cuando el prospecto pasa a "cerrado"
+  cierre: {
+    fechaEmision: '',
+    primaMensualUSD: '',   // prima mensual real de la póliza (sin discriminar impuestos)
+    sumaAseguradaUSD: '',  // suma asegurada contratada con Joha
+    compania: 'Life Seguros',
+    notas: '',
+  },
 
   creadoEn: new Date().toISOString(),
   actualizadoEn: new Date().toISOString(),
