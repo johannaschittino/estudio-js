@@ -470,6 +470,54 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
         ))}
       </div>
 
+      {/* Cierre — solo visible cuando el estado es cerrado */}
+      {p.estado === 'cerrado' && (
+        <div style={{ ...S.seccion, background: 'rgba(45,80,22,0.04)', borderRadius: 10, padding: 20, border: '1px solid rgba(45,80,22,0.15)' }}>
+          <h3 style={{ ...S.seccionTitulo, color: '#2D5016' }}>✓ Datos del cierre</h3>
+          <Grid cols={3}>
+            <Campo label="Fecha de emisión">
+              <input type="date" style={S.input} value={p.cierre?.fechaEmision || ''} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), fechaEmision: e.target.value } })} />
+            </Campo>
+            <Campo label="Compañía">
+              <select style={S.input} value={p.cierre?.compania || 'Life Seguros'} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), compania: e.target.value } })}>
+                <option value="Life Seguros">Life Seguros</option>
+                <option value="Orígenes">Orígenes</option>
+                <option value="Ambas">Life + Orígenes</option>
+                <option value="Otra">Otra</option>
+              </select>
+            </Campo>
+            <Campo label="Prima mensual (USD)">
+              <input type="number" style={S.input} placeholder="Ej: 261" value={p.cierre?.primaMensualUSD || ''} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), primaMensualUSD: e.target.value } })} />
+            </Campo>
+          </Grid>
+          {/* Resumen automático de prima */}
+          {p.cierre?.primaMensualUSD && (
+            <div style={{ display: 'flex', gap: 24, marginTop: 12, padding: '10px 14px', background: '#fff', borderRadius: 8, border: '1px solid rgba(45,80,22,0.15)' }}>
+              <div>
+                <div style={{ fontSize: 11, color: '#2D5016', textTransform: 'uppercase', letterSpacing: 0.3 }}>Prima mensual</div>
+                <div style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#2D5016' }}>
+                  ${Number(p.cierre.primaMensualUSD).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} USD
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#2D5016', textTransform: 'uppercase', letterSpacing: 0.3 }}>Prima anualizada</div>
+                <div style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#2D5016' }}>
+                  ${(Number(p.cierre.primaMensualUSD) * 12).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} USD
+                </div>
+              </div>
+            </div>
+          )}
+          <Grid cols={2} style={{ marginTop: 14 }}>
+            <Campo label="Suma asegurada contratada (USD)">
+              <input type="number" style={S.input} placeholder="Ej: 100000" value={p.cierre?.sumaAseguradaUSD || ''} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), sumaAseguradaUSD: e.target.value } })} />
+            </Campo>
+            <Campo label="Notas del cierre">
+              <input style={S.input} placeholder="Ej: Mod 5-10, nivelación en año 3" value={p.cierre?.notas || ''} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), notas: e.target.value } })} />
+            </Campo>
+          </Grid>
+        </div>
+      )}
+
       {/* Contexto personal */}
       <div style={S.seccion}>
         <h3 style={S.seccionTitulo}>Contexto personal</h3>
