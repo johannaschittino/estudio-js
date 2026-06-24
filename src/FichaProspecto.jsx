@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { T } from './tokens.js';
-import { ETAPAS, FUENTES, uid, todayISO, nuevoProspecto } from './data.js';
+import { ETAPAS, FUENTES, uid, todayISO, nuevoProspecto, nuevaOperacionCierre } from './data.js';
 
 const ETAPA_COLOR = {
   alpha: T.dorado, entrevistado: '#5B8FA8', propuesta: T.sage,
@@ -470,100 +470,118 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
         ))}
       </div>
 
-      {/* Cierre — solo visible cuando el estado es cerrado */}
+      {/* Operaciones de cierre — visibles cuando el estado es cerrado */}
       {p.estado === 'cerrado' && (
         <div style={{ ...S.seccion, background: 'rgba(45,80,22,0.04)', borderRadius: 10, padding: 20, border: '1px solid rgba(45,80,22,0.15)' }}>
-          <h3 style={{ ...S.seccionTitulo, color: '#2D5016' }}>✓ Datos del cierre</h3>
-
-          {/* Tipo de operación y cliente nuevo */}
-          <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-              <input type="radio" name={`tipo-${p.id}`} value="poliza_nueva"
-                checked={(p.cierre?.tipoOperacion || 'poliza_nueva') === 'poliza_nueva'}
-                onChange={() => onUpdate({ cierre: { ...(p.cierre || {}), tipoOperacion: 'poliza_nueva' } })} />
-              Póliza nueva
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-              <input type="radio" name={`tipo-${p.id}`} value="endoso"
-                checked={p.cierre?.tipoOperacion === 'endoso'}
-                onChange={() => onUpdate({ cierre: { ...(p.cierre || {}), tipoOperacion: 'endoso' } })} />
-              Endoso
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginLeft: 16 }}>
-              <input type="checkbox"
-                checked={p.cierre?.clienteNuevo || false}
-                onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), clienteNuevo: e.target.checked } })} />
-              Cliente nuevo (sin pólizas previas en Life)
-            </label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <h3 style={{ ...S.seccionTitulo, color: '#2D5016', margin: 0 }}>✓ Operaciones de cierre</h3>
+            <button style={{ ...S.btnMini, borderColor: '#2D5016', color: '#2D5016' }}
+              onClick={() => onUpdate({ cierres: [...(p.cierres || []), nuevaOperacionCierre()] })}>
+              + Agregar operación
+            </button>
           </div>
 
-          <Grid cols={3}>
-            <Campo label="Fecha de emisión">
-              <input type="date" style={S.input} value={p.cierre?.fechaEmision || ''} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), fechaEmision: e.target.value } })} />
-            </Campo>
-            <Campo label="Compañía">
-              <select style={S.input} value={p.cierre?.compania || 'Life Seguros'} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), compania: e.target.value } })}>
-                <option value="Life Seguros">Life Seguros</option>
-                <option value="Orígenes">Orígenes</option>
-                <option value="Ambas">Life + Orígenes</option>
-                <option value="Otra">Otra</option>
-              </select>
-            </Campo>
-            <Campo label={p.cierre?.tipoOperacion === 'endoso' ? 'Prima nueva (USD/mes)' : 'Prima mensual (USD)'}>
-              <input type="number" style={S.input} placeholder="Ej: 261" value={p.cierre?.primaMensualUSD || ''} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), primaMensualUSD: e.target.value } })} />
-            </Campo>
-          </Grid>
-
-          {/* Campo extra para endosos */}
-          {p.cierre?.tipoOperacion === 'endoso' && (
-            <Grid cols={3}>
-              <Campo label="Prima anterior (USD/mes)">
-                <input type="number" style={S.input} placeholder="Prima antes del endoso" value={p.cierre?.primaAnteriorUSD || ''} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), primaAnteriorUSD: e.target.value } })} />
-              </Campo>
-              <Campo label="NBS (delta de prima/mes)" span={2}>
-                <div style={{ ...S.input, background: T.papel2, color: '#2D5016', fontFamily: 'monospace', fontWeight: 700 }}>
-                  {p.cierre?.primaMensualUSD && p.cierre?.primaAnteriorUSD
-                    ? `$${(Number(p.cierre.primaMensualUSD) - Number(p.cierre.primaAnteriorUSD)).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD/mes → $${((Number(p.cierre.primaMensualUSD) - Number(p.cierre.primaAnteriorUSD)) * 12).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD/año`
-                    : '—'}
-                </div>
-              </Campo>
-            </Grid>
+          {(p.cierres || []).length === 0 && (
+            <p style={{ fontSize: 13, color: T.tinta40, fontStyle: 'italic' }}>
+              Sin operaciones cargadas. Agregá una póliza nueva, endoso, retiro o salud.
+            </p>
           )}
 
-          {/* Resumen de prima */}
-          {p.cierre?.primaMensualUSD && (
-            <div style={{ display: 'flex', gap: 24, marginTop: 10, padding: '10px 14px', background: '#fff', borderRadius: 8, border: '1px solid rgba(45,80,22,0.15)' }}>
-              <div>
-                <div style={{ fontSize: 11, color: '#2D5016', textTransform: 'uppercase', letterSpacing: 0.3 }}>Prima mensual</div>
-                <div style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 700, color: '#2D5016' }}>
-                  ${Number(p.cierre.primaMensualUSD).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD
+          {(p.cierres || []).map((op, idx) => {
+            const setCierre = (field, val) => {
+              const nuevos = (p.cierres || []).map((c, i) => i === idx ? { ...c, [field]: val } : c);
+              onUpdate({ cierres: nuevos });
+            };
+            const quitarCierre = () => onUpdate({ cierres: (p.cierres || []).filter((_, i) => i !== idx) });
+            const primaM = Number(op.primaMensualUSD) || 0;
+            const primaA = primaM * 12;
+            const nbsM = op.tipo === 'endoso' && op.primaAnteriorUSD ? primaM - Number(op.primaAnteriorUSD) : null;
+
+            const TIPO_LABELS = { poliza_nueva: 'Póliza nueva de vida', endoso: 'Endoso', retiro: 'Plan de retiro', salud: 'Seguro de salud' };
+
+            return (
+              <div key={op.id} style={{ background: '#fff', borderRadius: 9, padding: 16, marginBottom: 12, border: '1px solid rgba(45,80,22,0.12)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#2D5016', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                    Operación {idx + 1} — {TIPO_LABELS[op.tipo] || op.tipo}
+                  </span>
+                  <button style={{ background: 'none', border: 'none', color: T.terracota, cursor: 'pointer', fontSize: 13 }} onClick={quitarCierre}>✕ Quitar</button>
                 </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: '#2D5016', textTransform: 'uppercase', letterSpacing: 0.3 }}>Prima anualizada</div>
-                <div style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 700, color: '#2D5016' }}>
-                  ${(Number(p.cierre.primaMensualUSD) * 12).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD
+
+                {/* Tipo + cliente nuevo */}
+                <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select style={{ ...S.input, maxWidth: 220 }} value={op.tipo} onChange={e => setCierre('tipo', e.target.value)}>
+                    <option value="poliza_nueva">Póliza nueva de vida</option>
+                    <option value="endoso">Endoso</option>
+                    <option value="retiro">Plan de retiro</option>
+                    <option value="salud">Seguro de salud</option>
+                  </select>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer', color: T.tinta60 }}>
+                    <input type="checkbox" checked={op.clienteNuevo || false} onChange={e => setCierre('clienteNuevo', e.target.checked)} />
+                    Cliente nuevo
+                  </label>
                 </div>
-              </div>
-              {p.cierre.tipoOperacion === 'endoso' && p.cierre.primaAnteriorUSD && (
-                <div>
-                  <div style={{ fontSize: 11, color: '#2D5016', textTransform: 'uppercase', letterSpacing: 0.3 }}>NBS anual</div>
-                  <div style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 700, color: '#2D5016' }}>
-                    ${((Number(p.cierre.primaMensualUSD) - Number(p.cierre.primaAnteriorUSD)) * 12).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD
+
+                <Grid cols={3}>
+                  <Campo label="Fecha de emisión">
+                    <input type="date" style={S.input} value={op.fechaEmision || ''} onChange={e => setCierre('fechaEmision', e.target.value)} />
+                  </Campo>
+                  <Campo label="Compañía">
+                    <select style={S.input} value={op.compania || 'Life Seguros'} onChange={e => setCierre('compania', e.target.value)}>
+                      <option value="Life Seguros">Life Seguros</option>
+                      <option value="Orígenes">Orígenes</option>
+                      <option value="Otra">Otra</option>
+                    </select>
+                  </Campo>
+                  <Campo label={op.tipo === 'endoso' ? 'Prima nueva (USD/mes)' : 'Prima mensual (USD)'}>
+                    <input type="number" style={S.input} placeholder="Ej: 261" value={op.primaMensualUSD || ''} onChange={e => setCierre('primaMensualUSD', e.target.value)} />
+                  </Campo>
+                </Grid>
+
+                {op.tipo === 'endoso' && (
+                  <Grid cols={3}>
+                    <Campo label="Prima anterior (USD/mes)">
+                      <input type="number" style={S.input} placeholder="Prima antes del endoso" value={op.primaAnteriorUSD || ''} onChange={e => setCierre('primaAnteriorUSD', e.target.value)} />
+                    </Campo>
+                    <Campo label="NBS mensual" span={2}>
+                      <div style={{ ...S.input, background: T.papel2, color: '#2D5016', fontFamily: 'monospace', fontWeight: 700 }}>
+                        {nbsM !== null ? `$${nbsM.toLocaleString('en-US', { maximumFractionDigits: 0 })} USD/mes → $${(nbsM * 12).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD/año` : '—'}
+                      </div>
+                    </Campo>
+                  </Grid>
+                )}
+
+                <Grid cols={2} style={{ marginTop: 6 }}>
+                  <Campo label="Suma asegurada (USD)">
+                    <input type="number" style={S.input} placeholder="Ej: 100000" value={op.sumaAseguradaUSD || ''} onChange={e => setCierre('sumaAseguradaUSD', e.target.value)} />
+                  </Campo>
+                  <Campo label="Notas">
+                    <input style={S.input} placeholder="Ej: Mod 5-10, nivelación año 3" value={op.notas || ''} onChange={e => setCierre('notas', e.target.value)} />
+                  </Campo>
+                </Grid>
+
+                {primaM > 0 && (
+                  <div style={{ display: 'flex', gap: 20, marginTop: 10, padding: '8px 12px', background: 'rgba(45,80,22,0.06)', borderRadius: 7 }}>
+                    <div><div style={{ fontSize: 10, color: '#2D5016', textTransform: 'uppercase' }}>Prima mensual</div><div style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2D5016' }}>${primaM.toLocaleString('en-US', { maximumFractionDigits: 0 })} USD</div></div>
+                    <div><div style={{ fontSize: 10, color: '#2D5016', textTransform: 'uppercase' }}>Prima anualizada</div><div style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2D5016' }}>${primaA.toLocaleString('en-US', { maximumFractionDigits: 0 })} USD</div></div>
+                    {nbsM !== null && <div><div style={{ fontSize: 10, color: '#2D5016', textTransform: 'uppercase' }}>NBS anual</div><div style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2D5016' }}>${(nbsM * 12).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD</div></div>}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })}
 
-          <Grid cols={2} style={{ marginTop: 12 }}>
-            <Campo label="Suma asegurada contratada (USD)">
-              <input type="number" style={S.input} placeholder="Ej: 100000" value={p.cierre?.sumaAseguradaUSD || ''} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), sumaAseguradaUSD: e.target.value } })} />
-            </Campo>
-            <Campo label="Notas del cierre">
-              <input style={S.input} placeholder="Ej: Mod 5-10, nivelación en año 3" value={p.cierre?.notas || ''} onChange={(e) => onUpdate({ cierre: { ...(p.cierre || {}), notas: e.target.value } })} />
-            </Campo>
-          </Grid>
+          {/* Totales de todas las operaciones */}
+          {(p.cierres || []).length > 1 && (() => {
+            const totalM = (p.cierres || []).reduce((acc, c) => acc + (Number(c.primaMensualUSD) || 0), 0);
+            return (
+              <div style={{ display: 'flex', gap: 24, padding: '12px 16px', background: 'rgba(45,80,22,0.08)', borderRadius: 8, marginTop: 4 }}>
+                <div><div style={{ fontSize: 10, color: '#2D5016', textTransform: 'uppercase' }}>Total mensual</div><div style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2D5016', fontSize: 15 }}>${totalM.toLocaleString('en-US', { maximumFractionDigits: 0 })} USD</div></div>
+                <div><div style={{ fontSize: 10, color: '#2D5016', textTransform: 'uppercase' }}>Total anualizado</div><div style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2D5016', fontSize: 15 }}>${(totalM * 12).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD</div></div>
+                <div><div style={{ fontSize: 10, color: '#2D5016', textTransform: 'uppercase' }}>Operaciones</div><div style={{ fontWeight: 700, color: '#2D5016', fontSize: 15 }}>{(p.cierres || []).length}</div></div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
