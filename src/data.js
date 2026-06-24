@@ -71,17 +71,13 @@ export const nuevoProspecto = () => ({
   contextPersonal: '',
   grupoFamiliarId: null,
   vinculados: [],
-  // Datos del cierre mejorado
-  cierre: {
-    fechaEmision: '',
-    primaMensualUSD: '',
-    sumaAseguradaUSD: '',
-    compania: 'Life Seguros',
-    tipoOperacion: 'poliza_nueva', // 'poliza_nueva' | 'endoso'
-    clienteNuevo: false,
-    primaAnteriorUSD: '',          // para endosos: prima antes del endoso
-    notas: '',
-  },
+  // Lista de operaciones de cierre — un cliente puede tener múltiples:
+  // póliza nueva de vida, endoso, plan de retiro, salud, etc.
+  // Cada operación es independiente y suma al total de prima y a los contadores del Dashboard/CAV.
+  // operacion: { id, tipo: 'poliza_nueva'|'endoso'|'retiro'|'salud',
+  //              primaMensualUSD, sumaAseguradaUSD, compania,
+  //              clienteNuevo, primaAnteriorUSD (endosos), fechaEmision, notas }
+  cierres: [],
   // Pólizas de cartera importadas desde Excel
   polizasCartera: [],
   // Datos de contacto del Excel
@@ -157,6 +153,19 @@ export const nuevoCliente = nuevoProspecto;
 export const cargarClientes = cargarProspectos;
 export const guardarCliente = guardarProspecto;
 export const eliminarClienteRemoto = eliminarProspecto;
+
+// Crea una operación de cierre vacía
+export const nuevaOperacionCierre = () => ({
+  id: uid(),
+  tipo: 'poliza_nueva',      // 'poliza_nueva' | 'endoso' | 'retiro' | 'salud'
+  primaMensualUSD: '',
+  sumaAseguradaUSD: '',
+  compania: 'Life Seguros',
+  clienteNuevo: false,
+  primaAnteriorUSD: '',      // solo para endosos
+  fechaEmision: '',
+  notas: '',
+});
 
 /* ============================================================
    IMPORTACIÓN DE EXCEL DE CARTERA
