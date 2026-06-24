@@ -68,27 +68,53 @@ export default function Dashboard({ prospectos }) {
 
   const total = prospectos.length;
   const cerrados = prospectos.filter((p) => p.estado === 'cerrado');
-  const cerradosConCierre = cerrados.filter((p) => p.cierre?.primaMensualUSD && Number(p.cierre.primaMensualUSD) > 0);
 
-  // Métricas anuales
-  const primaAnualTotal = cerradosConCierre.reduce((acc, p) => acc + Number(p.cierre.primaMensualUSD) * 12, 0);
-  const primaMensualTotal = cerradosConCierre.reduce((acc, p) => acc + Number(p.cierre.primaMensualUSD), 0);
-  const primaAnualPromedio = cerradosConCierre.length > 0 ? primaAnualTotal / cerradosConCierre.length : null;
-  const pctMetaAnual = META_ANUAL_USD > 0 ? Math.min(100, (primaAnualTotal / META_ANUAL_USD) * 100) : 0;
+  // Helper: todas las operaciones de cierre de un prospecto
+  const opsDe = (p) => p.cierres || (p.cierre?.primaMensualUSD ? [{ ...p.cierre, tipo: p.cierre.tipoOperacion || 'poliza_nueva' }] : []);
 
-  // Métricas por tipo de producto (cierres)
-  const polizasVida = cerrados.filter(p => p.cierre?.tipoOperacion !== 'endoso' && detectarTipoProducto(p.cierre?.descripcionPlan || '') === 'vida').length;
-  const polizasRetiro = cerrados.filter(p => detectarTipoProducto(p.cierre?.descripcionPlan || '') === 'retiro').length;
-  const polizasSalud = cerrados.filter(p => detectarTipoProducto(p.cierre?.descripcionPlan || '') === 'salud').length;
-  const endosos = cerrados.filter(p => p.cierre?.tipoOperacion === 'endoso').length;
-  const clientesNuevos = cerrados.filter(p => p.cierre?.clienteNuevo).length;
+  // Todas las operaciones de todos los cerrados
+  const todasOps = cerrados.flatMap(p => opsDe(p));
 
-  // Cierres del mes actual
-  const cerradosMes = cerrados.filter(p => {
-    const fecha = p.cierre?.fechaEmision || p.actualizadoEn || '';
-    return fecha.startsWith(mesKey);
-  });
-  const primaAnualMes = cerradosMes.filter(p => p.cierre?.primaMensualUSD).reduce((acc, p) => acc + Number(p.cierre.primaMensualUSD) * 12, 0);
+  // ── VIDA ── prima anualizada (mensual × 12), tiene objetivo
+  const opsVida = todasOps.filter(op => op.tipo === 'poliza_nueva');
+  const cantVida = opsVida.length;
+  const primaVidaAnual = opsVida.reduce((s, op) => s + (Number(op.primaMensualUSD) || 0) * 12, 0);
+  const primaVidaAnualPromedio = cantVida > 0 ? primaVidaAnual / cantVida : null;
+  const pctMetaAnual = META_ANUAL_USD > 0 ? Math.min(100, (primaVidaAnual / META_ANUAL_USD) * 100) : 0;
+
+  // ── ENDOSOS ── NBS anualizada (delta mensual × 12), sin objetivo de prima
+  const opsEndosos = todasOps.filter(op => op.tipo === 'endoso');
+  const cantEndosos = opsEndosos.length;
+  const nbsEndososAnual = opsEndosos.reduce((s, op) => {
+    const nbs = (Number(op.primaMensualUSD) || 0) - (Number(op.primaAnteriorUSD) || 0);
+    return s + Math.max(0, nbs) * 12;
+  }, 0);
+
+  // ── RETIRO ── prima mensual (no se anualiza), sin objetivo de prima
+  const opsRetiro = todasOps.filter(op => op.tipo === 'retiro');
+  const cantRetiro = opsRetiro.length;
+  const primaRetiroMensual = opsRetiro.reduce((s, op) => s + (Number(op.primaMensualUSD) || 0), 0);
+
+  // ── SALUD ── prima mensual (no se anualiza), sin objetivo de prima
+  const opsSalud = todasOps.filter(op => op.tipo === 'salud');
+  const cantSalud = opsSalud.length;
+  const primaSaludMensual = opsSalud.reduce((s, op) => s + (Number(op.primaMensualUSD) || 0), 0);
+
+  // ── TOTALES GENERALES ──
+  const cantTotalOps = todasOps.length;
+  const clientesNuevos = todasOps.filter(op => op.clienteNuevo).length;
+  const cerradosConCierre = cerrados.filter(p => opsDe(p).length > 0);
+
+  // ── MES ACTUAL ──
+  const opsMes = (tipo) => cerrados.flatMap(p =>
+    opsDe(p).filter(op => (op.fechaEmision || '').startsWith(mesKey) && (!tipo || op.tipo === tipo))
+  );
+  const cerradosMes = cerrados.filter(p => opsDe(p).some(op => (op.fechaEmision || '').startsWith(mesKey)));
+  const primaVidaMes = opsMes('poliza_nueva').reduce((s, op) => s + (Number(op.primaMensualUSD) || 0) * 12, 0);
+  const endososMes = opsMes('endoso').length;
+  const retiroMes = opsMes('retiro').length;
+  const saludMes = opsMes('salud').length;
+  const clientesNuevosMes = opsMes(null).filter(op => op.clienteNuevo).length;
 
   const hoy = new Date().toISOString().slice(0, 10);
   const vencidas = prospectos.filter((p) => p.fechaAccion && p.fechaAccion < hoy && p.estado !== 'cerrado' && p.estado !== 'cancelado').length;
@@ -141,38 +167,50 @@ export default function Dashboard({ prospectos }) {
       {/* ===== ANUAL ===== */}
       {tabDash === 'anual' && (
         <>
+          {/* Resumen general */}
           <div style={S.grid4}>
             <Metrica label="Total cartera" valor={total} sub="prospectos cargados" />
             <Metrica label="Cerrados" valor={cerrados.length} sub={`${fmtPct(tasaConversion)} conversión`} color="#2D5016" />
-            <Metrica label="Prima mensual total" valor={fmtUSD(primaMensualTotal)} sub="cartera activa" color={T.sage} />
-            <Metrica label="Prima anualizada total" valor={fmtUSD(primaAnualTotal)} sub="objetivo anual" color={T.dorado} />
+            <Metrica label="Total operaciones" valor={cantTotalOps} sub="vida + endosos + retiro + salud" />
+            <Metrica label="Clientes nuevos" valor={clientesNuevos} sub="sin pólizas previas en Life" color={T.sage} />
           </div>
 
+          {/* Objetivo de vida */}
           <div style={S.cardWide}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10 }}>
               <div>
-                <div style={{ fontSize: 11, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Progreso meta anual · {fmtUSD(META_ANUAL_USD)}</div>
-                <div style={{ fontFamily: T.serif, fontSize: 22, fontWeight: 700 }}>{fmtUSD(primaAnualTotal)}</div>
+                <div style={{ fontSize: 11, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Prima vida anualizada · meta {fmtUSD(META_ANUAL_USD)}</div>
+                <div style={{ fontFamily: T.serif, fontSize: 22, fontWeight: 700 }}>{fmtUSD(primaVidaAnual)}</div>
+                <div style={{ fontSize: 12, color: T.tinta40, marginTop: 3 }}>{cantVida} póliza{cantVida !== 1 ? 's' : ''} · promedio {fmtUSD(primaVidaAnualPromedio)}/año</div>
               </div>
               <div style={{ fontFamily: T.serif, fontSize: 20, fontWeight: 700, color: pctMetaAnual >= 100 ? '#2D5016' : T.dorado }}>{fmtPct(pctMetaAnual)}</div>
             </div>
             <div style={{ height: 10, background: T.papel2, borderRadius: 6, overflow: 'hidden' }}>
               <div style={{ height: '100%', borderRadius: 6, background: pctMetaAnual >= 100 ? '#2D5016' : pctMetaAnual >= 50 ? T.sage : T.dorado, width: `${pctMetaAnual}%`, transition: 'width 0.5s' }} />
             </div>
-            {primaAnualTotal < META_ANUAL_USD && <div style={{ fontSize: 12, color: T.tinta40, marginTop: 6 }}>Faltan {fmtUSD(META_ANUAL_USD - primaAnualTotal)} para la meta anual</div>}
+            {primaVidaAnual < META_ANUAL_USD && <div style={{ fontSize: 12, color: T.tinta40, marginTop: 6 }}>Faltan {fmtUSD(META_ANUAL_USD - primaVidaAnual)} para la meta anual de vida</div>}
           </div>
 
-          <div style={S.grid4}>
-            <Metrica label="Prima anual promedio" valor={fmtUSD(primaAnualPromedio)} sub="por cliente cerrado" color={T.dorado} />
-            <Metrica label="Pólizas de vida" valor={polizasVida} />
-            <Metrica label="Endosos" valor={endosos} />
-            <Metrica label="Retiro" valor={polizasRetiro} />
-          </div>
-          <div style={S.grid4}>
-            <Metrica label="Salud" valor={polizasSalud} />
-            <Metrica label="Clientes nuevos" valor={clientesNuevos} />
-            <Metrica label="Con cierre cargado" valor={cerradosConCierre.length} sub={`de ${cerrados.length} cerrados`} color={cerradosConCierre.length === cerrados.length ? T.sage : T.terracota} />
-            <Metrica label="Conversión" valor={fmtPct(tasaConversion)} sub="total pipeline" />
+          {/* Métricas discriminadas por tipo */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
+            {/* Endosos */}
+            <div style={S.metricaCard}>
+              <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Endosos</div>
+              <div style={{ fontFamily: T.serif, fontSize: 24, fontWeight: 700, color: T.tinta }}>{cantEndosos}</div>
+              <div style={{ fontSize: 12, color: T.tinta60, marginTop: 4 }}>NBS anual: {fmtUSD(nbsEndososAnual)}</div>
+            </div>
+            {/* Retiro */}
+            <div style={S.metricaCard}>
+              <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Retiro</div>
+              <div style={{ fontFamily: T.serif, fontSize: 24, fontWeight: 700, color: T.tinta }}>{cantRetiro}</div>
+              <div style={{ fontSize: 12, color: T.tinta60, marginTop: 4 }}>Prima mensual: {fmtUSD(primaRetiroMensual)}/mes</div>
+            </div>
+            {/* Salud */}
+            <div style={S.metricaCard}>
+              <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Salud</div>
+              <div style={{ fontFamily: T.serif, fontSize: 24, fontWeight: 700, color: T.tinta }}>{cantSalud}</div>
+              <div style={{ fontSize: 12, color: T.tinta60, marginTop: 4 }}>Prima mensual: {fmtUSD(primaSaludMensual)}/mes</div>
+            </div>
           </div>
 
           <div style={S.grid2}>
@@ -194,20 +232,24 @@ export default function Dashboard({ prospectos }) {
               <h3 style={S.cardTitulo}>Clientes cerrados</h3>
               {cerrados.length === 0 && <p style={{ fontSize: 13, color: T.tinta40, fontStyle: 'italic' }}>Sin cierres todavía.</p>}
               {cerrados.map(p => {
-                const primaM = p.cierre?.primaMensualUSD ? Number(p.cierre.primaMensualUSD) : null;
-                const primaA = primaM ? primaM * 12 : null;
-                const esEndoso = p.cierre?.tipoOperacion === 'endoso';
+                const ops = opsDe(p);
+                const vidaOps = ops.filter(op => op.tipo === 'poliza_nueva');
+                const endoOps = ops.filter(op => op.tipo === 'endoso');
+                const retOps = ops.filter(op => op.tipo === 'retiro');
+                const salOps = ops.filter(op => op.tipo === 'salud');
+                const primaVidaP = vidaOps.reduce((s, op) => s + (Number(op.primaMensualUSD) || 0) * 12, 0);
                 return (
                   <div key={p.id} style={{ padding: '9px 0', borderBottom: `1px solid ${T.borde}` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                       <span style={{ fontWeight: 600, fontSize: 13 }}>{p.nombre}</span>
-                      {primaA && <span style={{ fontFamily: 'monospace', fontSize: 12.5, color: '#2D5016', fontWeight: 600 }}>{fmtUSD(primaA)}/año</span>}
+                      {ops.some(op => op.clienteNuevo) && <span style={{ fontSize: 10.5, color: T.sage, fontWeight: 600 }}>nuevo</span>}
                     </div>
-                    <div style={{ display: 'flex', gap: 12, fontSize: 11.5, color: T.tinta40, flexWrap: 'wrap' }}>
-                      {primaM && <span>{fmtUSD(primaM)}/mes</span>}
-                      {esEndoso && <span style={{ color: T.dorado }}>endoso</span>}
-                      {p.cierre?.clienteNuevo && <span style={{ color: T.sage }}>cliente nuevo</span>}
-                      {!primaM && <span style={{ color: T.terracota }}>⚠ Sin datos</span>}
+                    <div style={{ display: 'flex', gap: 10, fontSize: 11.5, flexWrap: 'wrap' }}>
+                      {vidaOps.length > 0 && <span style={{ color: T.tinta60 }}>vida: {fmtUSD(primaVidaP)}/año</span>}
+                      {endoOps.length > 0 && <span style={{ color: T.tinta60 }}>endosos: {endoOps.length}</span>}
+                      {retOps.length > 0 && <span style={{ color: T.tinta60 }}>retiro: {retOps.length}</span>}
+                      {salOps.length > 0 && <span style={{ color: T.tinta60 }}>salud: {salOps.length}</span>}
+                      {ops.length === 0 && <span style={{ color: T.terracota }}>⚠ Sin datos</span>}
                     </div>
                   </div>
                 );
@@ -267,10 +309,11 @@ export default function Dashboard({ prospectos }) {
             ) : (
               <>
                 <div style={S.grid4}>
-                  <Metrica label="Prima anualizada" valor={fmtUSD(primaAnualMes)} sub={objMes.prima ? `meta: ${fmtUSD(Number(objMes.prima))}` : ''} color={objMes.prima && primaAnualMes >= Number(objMes.prima) ? '#2D5016' : T.dorado} />
-                  <Metrica label="Cierres del mes" valor={cerradosMes.length} />
-                  <Metrica label="Clientes nuevos" valor={cerradosMes.filter(p => p.cierre?.clienteNuevo).length} />
-                  <Metrica label="Endosos" valor={cerradosMes.filter(p => p.cierre?.tipoOperacion === 'endoso').length} />
+                  <Metrica label="Prima vida anualizada" valor={fmtUSD(primaVidaMes)} sub={objMes.prima ? `meta: ${fmtUSD(Number(objMes.prima))}` : ''} color={objMes.prima && primaVidaMes >= Number(objMes.prima) ? '#2D5016' : T.dorado} />
+                  <Metrica label="Endosos" valor={endososMes} sub={objMes.endosos ? `meta: ${objMes.endosos}` : ''} color={objMes.endosos && endososMes >= Number(objMes.endosos) ? '#2D5016' : T.tinta} />
+                  <Metrica label="Retiro" valor={retiroMes} sub={objMes.retiro ? `meta: ${objMes.retiro}` : ''} color={objMes.retiro && retiroMes >= Number(objMes.retiro) ? '#2D5016' : T.tinta} />
+                  <Metrica label="Salud" valor={saludMes} sub={objMes.salud ? `meta: ${objMes.salud}` : ''} color={objMes.salud && saludMes >= Number(objMes.salud) ? '#2D5016' : T.tinta} />
+                  <Metrica label="Clientes nuevos" valor={clientesNuevosMes} sub={objMes.clientesNuevos ? `meta: ${objMes.clientesNuevos}` : ''} />
                 </div>
                 {objMes.prima && (
                   <div style={{ marginTop: 12 }}>
@@ -284,14 +327,18 @@ export default function Dashboard({ prospectos }) {
                   </div>
                 )}
                 {cerradosMes.map(p => {
-                  const primaA = p.cierre?.primaMensualUSD ? Number(p.cierre.primaMensualUSD) * 12 : null;
+                  const opsDelMes = opsDe(p).filter(op => (op.fechaEmision || '').startsWith(mesKey));
+                  const primaA = opsDelMes.reduce((s, op) => s + (Number(op.primaMensualUSD) || 0) * 12, 0);
                   return (
                     <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${T.borde}`, fontSize: 13 }}>
                       <div>
                         <span style={{ fontWeight: 600 }}>{p.nombre}</span>
-                        <span style={{ fontSize: 11.5, color: T.tinta40, marginLeft: 8 }}>{p.cierre?.tipoOperacion === 'endoso' ? 'endoso' : 'póliza nueva'}{p.cierre?.clienteNuevo ? ' · cliente nuevo' : ''}</span>
+                        <span style={{ fontSize: 11.5, color: T.tinta40, marginLeft: 8 }}>
+                          {opsDelMes.map(op => ({ poliza_nueva: 'vida', endoso: 'endoso', retiro: 'retiro', salud: 'salud' })[op.tipo] || op.tipo).join(' + ')}
+                          {opsDelMes.some(op => op.clienteNuevo) ? ' · cliente nuevo' : ''}
+                        </span>
                       </div>
-                      <span style={{ fontFamily: 'monospace', color: '#2D5016', fontWeight: 600 }}>{primaA ? fmtUSD(primaA) + '/año' : '—'}</span>
+                      <span style={{ fontFamily: 'monospace', color: '#2D5016', fontWeight: 600 }}>{primaA > 0 ? fmtUSD(primaA) + '/año' : '—'}</span>
                     </div>
                   );
                 })}
@@ -305,7 +352,7 @@ export default function Dashboard({ prospectos }) {
       {tabDash === 'incentivos' && (
         <>
           {/* CAV fija */}
-          <IncentivoBloqueCAV cerrados={cerrados} polizasVida={polizasVida} endosos={endosos} polizasRetiro={polizasRetiro} polizasSalud={polizasSalud} clientesNuevos={clientesNuevos} primaAnualTotal={primaAnualTotal} />
+          <IncentivoBloqueCAV cerrados={cerrados} polizasVida={cantVida} endosos={cantEndosos} polizasRetiro={cantRetiro} polizasSalud={cantSalud} clientesNuevos={clientesNuevos} primaAnualTotal={primaVidaAnual} />
 
           {/* Incentivos adicionales */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '20px 0 12px' }}>
@@ -330,6 +377,7 @@ export default function Dashboard({ prospectos }) {
               primaAnualTotal={primaAnualTotal}
               onEditar={() => setEditIncentivo(inc)}
               onEliminar={() => eliminarIncentivo(inc.id)}
+              polizasVida={cantVida} endosos={cantEndosos} polizasRetiro={cantRetiro} polizasSalud={cantSalud} clientesNuevos={clientesNuevos} primaAnualTotal={primaVidaAnual}
             />
           ))}
 
