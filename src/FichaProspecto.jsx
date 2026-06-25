@@ -617,6 +617,7 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
                     <option value="Vigente">Vigente</option>
                     <option value="Cancelada">Cancelada</option>
                     <option value="Lapseada">Lapseada</option>
+                    <option value="Rescatada">Rescatada</option>
                     <option value="Suspendida">Suspendida</option>
                     <option value="Vencida">Vencida</option>
                     <option value={pol.estado || ''}>{pol.estado || 'Sin estado'}</option>
@@ -627,6 +628,9 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
                   <span>Prima: {pol.moneda === 'ARS' ? '$' : 'USD '}${Number(pol.primaAnual).toLocaleString('es-AR')}/año</span>
                   {pol.fechaVigencia && <span>Desde {pol.fechaVigencia}</span>}
                 </div>
+                {pol.tomador && pol.tomador !== pol.asegurado && (
+                  <div style={{ fontSize: 11, color: T.tinta40, marginTop: 2 }}>Tomador: {pol.tomador}</div>
+                )}
                 {pol.suplementos?.length > 0 && (
                   <div style={{ fontSize: 11, color: T.tinta40, marginTop: 3 }}>{pol.suplementos.join(' · ')}</div>
                 )}
