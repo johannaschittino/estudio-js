@@ -774,9 +774,7 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
                       mail: p.mail || origen.mail,
                       fechaNacimiento: p.fechaNacimiento || origen.fechaNacimiento,
                       notas: [p.notas, origen.notas].filter(Boolean).join(' | '),
-                      contextPersonal: [p.contextPersonal, origen.contextPersonal].filter(Boolean).join('
-
-'),
+                      contextPersonal: [p.contextPersonal, origen.contextPersonal].filter(Boolean).join(' | '),
                     });
                     if (onEliminar) onEliminar(origen.id);
                     setMostrarFusion(false);
