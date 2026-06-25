@@ -144,9 +144,9 @@ export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrA
 
       {/* ── ZONA DE PELIGRO — fuera de tabs, siempre visible en la ficha ── */}
       <div style={{ padding: '0 20px 32px' }}>
-        {/* ── ZONA DE PELIGRO ── */}}
-        <div style={{ ...S.seccion, borderTop: `2px solid ${T.terracota}20`, paddingTop: 24, marginTop: 8 }}>
-        <h3 style={{ ...S.seccionTitulo, color: T.terracota }}>Zona de peligro</h3>
+        <div style={{ borderTop: `1px solid ${T.borde}`, paddingTop: 16, marginTop: 8 }}>
+          <details>
+            <summary style={{ fontSize: 12, color: T.tinta40, cursor: 'pointer', userSelect: 'none', marginBottom: 12 }}>Zona de peligro</summary>
 
         {/* Fusionar con otra ficha */}
         <div style={{ marginBottom: 20 }}>
@@ -753,6 +753,16 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
                 {pol.suplementos?.length > 0 && (
                   <div style={{ fontSize: 11, color: T.tinta40, marginTop: 3 }}>{pol.suplementos.join(' · ')}</div>
                 )}
+                <button
+                  onClick={() => {
+                    if (window.confirm(`¿Eliminar la póliza #${pol.nroPoliza} — ${pol.descripcionPlan}?`)) {
+                      onUpdate({ polizasCartera: (p.polizasCartera || []).filter(pp => (pp.id || pp.nroPoliza) !== (pol.id || pol.nroPoliza)) });
+                    }
+                  }}
+                  style={{ marginTop: 6, fontSize: 11, color: T.terracota, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  Eliminar póliza
+                </button>
               </div>
             );
           })}
