@@ -233,8 +233,25 @@ export function procesarImportacionCartera(filas, prospectoExistentes) {
   const grupos = {};
 
   for (const fila of filas) {
-    const key = fila.nroDoc || fila.tomadorRaw; // agrupar por doc o por nombre si no hay doc
-    if (!grupos[key]) grupos[key] = { filas: [], nroDoc: fila.nroDoc, tomadorRaw: fila.tomadorRaw, aseguradoRaw: fila.aseguradoRaw, fechaNacRaw: fila.fechaNacRaw, tel1: fila.tel1, tel2: fila.tel2, tel3: fila.tel3, mail: fila.mail };
+    // Agrupar por ASEGURADO (no por tomador) — cada asegurado es una ficha distinta
+    const key = fila.aseguradoRaw || fila.tomadorRaw;
+    if (!grupos[key]) grupos[key] = {
+      filas: [],
+      nroDoc: fila.nroDoc,
+      tomadorRaw: fila.tomadorRaw,
+      aseguradoRaw: fila.aseguradoRaw || fila.tomadorRaw,
+      fechaNacRaw: fila.fechaNacRaw,
+      tel1: fila.tel1, tel2: fila.tel2, tel3: fila.tel3, mail: fila.mail,
+    };
+    // Actualizar datos de contacto si vienen del tomador principal (la fila donde tomador = asegurado)
+    if (fila.tomadorRaw === fila.aseguradoRaw) {
+      grupos[key].nroDoc = grupos[key].nroDoc || fila.nroDoc;
+      grupos[key].tel1 = grupos[key].tel1 || fila.tel1;
+      grupos[key].tel2 = grupos[key].tel2 || fila.tel2;
+      grupos[key].tel3 = grupos[key].tel3 || fila.tel3;
+      grupos[key].mail = grupos[key].mail || fila.mail;
+      grupos[key].fechaNacRaw = grupos[key].fechaNacRaw || fila.fechaNacRaw;
+    }
     grupos[key].filas.push(fila);
   }
 
