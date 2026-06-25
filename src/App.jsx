@@ -293,6 +293,7 @@ function EstudioApp({ user }) {
             prospecto={activo}
             prospectos={prospectos}
             onUpdate={(patch) => persistir(activo.id, patch)}
+            onEliminar={eliminarP}
             onVolver={() => { setVista('pipeline'); setActivoId(null); }}
             onIrAnalisis={() => setVista('analisis')}
             onCrearDesde={(datosIniciales) => {
