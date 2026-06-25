@@ -66,8 +66,18 @@ export default function Dashboard({ prospectos }) {
     guardarObjetivosMes(mesKey, newObj);
   };
 
+  // ── SEPARACIÓN CARTERA vs PROSPECTOS ──
+  const deCartera = prospectos.filter(p => p.fuente === 'Cartera');
+  const prospectosPuros = prospectos.filter(p => p.fuente !== 'Cartera');
   const total = prospectos.length;
   const cerrados = prospectos.filter((p) => p.estado === 'cerrado');
+
+  // ── MÉTRICAS DE PÓLIZAS DE CARTERA ──
+  const todasPolizasCartera = deCartera.flatMap(p => p.polizasCartera || []);
+  const polizasVigentes = todasPolizasCartera.filter(pol => (pol.estado || '').toLowerCase().includes('vigente')).length;
+  const polizasCanceladas = todasPolizasCartera.filter(pol => (pol.estado || '').toLowerCase().includes('cancelad')).length;
+  const polizasLapseadas = todasPolizasCartera.filter(pol => (pol.estado || '').toLowerCase().includes('lapsead')).length;
+  const polizasOtro = todasPolizasCartera.length - polizasVigentes - polizasCanceladas - polizasLapseadas;
 
   // Helper: todas las operaciones de cierre de un prospecto
   const opsDe = (p) => p.cierres || (p.cierre?.primaMensualUSD ? [{ ...p.cierre, tipo: p.cierre.tipoOperacion || 'poliza_nueva' }] : []);
@@ -169,11 +179,40 @@ export default function Dashboard({ prospectos }) {
         <>
           {/* Resumen general */}
           <div style={S.grid4}>
-            <Metrica label="Total cartera" valor={total} sub="prospectos cargados" />
+            <Metrica label="Total registros" valor={total} sub={`${deCartera.length} cartera · ${prospectosPuros.length} prospectos`} />
             <Metrica label="Cerrados" valor={cerrados.length} sub={`${fmtPct(tasaConversion)} conversión`} color="#2D5016" />
             <Metrica label="Total operaciones" valor={cantTotalOps} sub="vida + endosos + retiro + salud" />
             <Metrica label="Clientes nuevos" valor={clientesNuevos} sub="sin pólizas previas en Life" color={T.sage} />
           </div>
+
+          {/* Pólizas de cartera — estado */}
+          {todasPolizasCartera.length > 0 && (
+            <div style={{ ...S.cardWide, marginBottom: 14 }}>
+              <h3 style={S.cardTitulo}>Estado de pólizas en cartera</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                <div style={S.metricaCard}>
+                  <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>Vigentes</div>
+                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: '#2D5016' }}>{polizasVigentes}</div>
+                  <div style={{ fontSize: 11, color: T.tinta40, marginTop: 3 }}>{todasPolizasCartera.length > 0 ? fmtPct(polizasVigentes / todasPolizasCartera.length * 100) : '—'} del total</div>
+                </div>
+                <div style={S.metricaCard}>
+                  <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>Canceladas</div>
+                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: T.terracota }}>{polizasCanceladas}</div>
+                  <div style={{ fontSize: 11, color: T.tinta40, marginTop: 3 }}>{todasPolizasCartera.length > 0 ? fmtPct(polizasCanceladas / todasPolizasCartera.length * 100) : '—'} del total</div>
+                </div>
+                <div style={S.metricaCard}>
+                  <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>Lapseadas</div>
+                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: T.dorado }}>{polizasLapseadas}</div>
+                  <div style={{ fontSize: 11, color: T.tinta40, marginTop: 3 }}>{todasPolizasCartera.length > 0 ? fmtPct(polizasLapseadas / todasPolizasCartera.length * 100) : '—'} del total</div>
+                </div>
+                <div style={S.metricaCard}>
+                  <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>Total pólizas</div>
+                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: T.tinta }}>{todasPolizasCartera.length}</div>
+                  <div style={{ fontSize: 11, color: T.tinta40, marginTop: 3 }}>{deCartera.length} clientes</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Objetivo de vida */}
           <div style={S.cardWide}>
@@ -318,11 +357,11 @@ export default function Dashboard({ prospectos }) {
                 {objMes.prima && (
                   <div style={{ marginTop: 12 }}>
                     <div style={{ height: 8, background: T.papel2, borderRadius: 5, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 5, background: primaVidaMes >= Number(objMes.prima) ? '#2D5016' : T.dorado, width: `${Math.min(100, (primaVidaMes / Number(objMes.prima)) * 100)}%`, transition: 'width 0.4s' }} />
+                      <div style={{ height: '100%', borderRadius: 5, background: primaAnualMes >= Number(objMes.prima) ? '#2D5016' : T.dorado, width: `${Math.min(100, (primaAnualMes / Number(objMes.prima)) * 100)}%`, transition: 'width 0.4s' }} />
                     </div>
                     <div style={{ fontSize: 12, color: T.tinta40, marginTop: 4 }}>
-                      {fmtPct((primaVidaMes / Number(objMes.prima)) * 100)} del objetivo mensual
-                      {primaVidaMes < Number(objMes.prima) && ` · Faltan ${fmtUSD(Number(objMes.prima) - primaVidaMes)}`}
+                      {fmtPct((primaAnualMes / Number(objMes.prima)) * 100)} del objetivo mensual
+                      {primaAnualMes < Number(objMes.prima) && ` · Faltan ${fmtUSD(Number(objMes.prima) - primaAnualMes)}`}
                     </div>
                   </div>
                 )}
@@ -404,7 +443,6 @@ const CAV_LLAVES_DEFAULT = [
   { id: 'retiro', label: 'Planes de retiro', meta: '' },
   { id: 'salud', label: 'Seguros de salud', meta: '' },
   { id: 'clientes_nuevos', label: 'Clientes nuevos', meta: '' },
-  { id: 'total_operaciones', label: 'Total de operaciones', meta: '' },
 ];
 
 function cargarCAV() {
@@ -423,7 +461,6 @@ function IncentivoBloqueCAV({ cerrados, polizasVida, endosos, polizasRetiro, pol
     retiro: polizasRetiro,
     salud: polizasSalud,
     clientes_nuevos: clientesNuevos,
-    total_operaciones: polizasVida + endosos + polizasRetiro + polizasSalud,
   };
 
   const fmtActual = (id) => {
