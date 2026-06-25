@@ -276,6 +276,7 @@ export function procesarImportacionCartera(filas, prospectoExistentes) {
       const polizasActualizadas = [...polizasExistentes, ...polizasNuevas];
       resultados.actualizados.push({
         ...existente,
+        nombre: aseguradoFormateado || existente.nombre,
         polizasCartera: polizasActualizadas,
         nroDoc: grupo.nroDoc || existente.nroDoc,
         telefonos: telefonos.length > 0 ? telefonos : (existente.telefonos || []),
