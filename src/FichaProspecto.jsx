@@ -38,10 +38,13 @@ const TIPOS_CONTACTO = [
   { value: 'nota', label: 'Nota interna' },
 ];
 
-export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrAnalisis, onCrearDesde, prospectos = [] }) {
+export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrAnalisis, onCrearDesde, onEliminar, prospectos = [] }) {
   const [tab, setTab] = useState('seguimiento');
   const [nuevoContacto, setNuevoContacto] = useState({ tipo: 'llamada', texto: '', fecha: todayISO() });
   const [mostrarFormContacto, setMostrarFormContacto] = useState(false);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
+  const [mostrarFusion, setMostrarFusion] = useState(false);
+  const [fusionId, setFusionId] = useState('');
 
   const set = (field, value) => onUpdate({ [field]: value });
 
@@ -699,6 +702,121 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
           <Campo label="Tope — Vida puro (ARS)"><input type="number" style={S.input} value={p.deduccionGanancias?.topeVidaPuro || ''} onChange={(e) => setDeduccion('topeVidaPuro', e.target.value)} /></Campo>
           <Campo label="Tope — Retiro (ARS)"><input type="number" style={S.input} value={p.deduccionGanancias?.topeRetiro || ''} onChange={(e) => setDeduccion('topeRetiro', e.target.value)} /></Campo>
         </Grid>
+      </div>
+
+      {/* ── ZONA DE PELIGRO ── */}
+      <div style={{ ...S.seccion, borderTop: `2px solid ${T.terracota}20`, paddingTop: 24, marginTop: 8 }}>
+        <h3 style={{ ...S.seccionTitulo, color: T.terracota }}>Zona de peligro</h3>
+
+        {/* Fusionar con otra ficha */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, color: T.tinta60, marginBottom: 10 }}>
+            <strong>Fusionar con otra ficha</strong> — combiná los datos de un duplicado en esta ficha y eliminá el otro.
+          </div>
+          {!mostrarFusion ? (
+            <button style={{ ...S.btnGhost, borderColor: T.dorado, color: T.dorado }} onClick={() => setMostrarFusion(true)}>
+              Fusionar con duplicado
+            </button>
+          ) : (
+            <div style={{ background: T.papel2, borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 12, color: T.tinta60, marginBottom: 10 }}>
+                Seleccioná la ficha que querés fusionar <strong>en esta</strong>. Sus pólizas, historial y notas se van a combinar acá, y la ficha seleccionada se va a eliminar.
+              </div>
+              <select
+                style={{ ...S.input, marginBottom: 12 }}
+                value={fusionId}
+                onChange={e => setFusionId(e.target.value)}
+              >
+                <option value="">— Elegir ficha a fusionar —</option>
+                {prospectos.filter(x => x.id !== p.id).map(x => (
+                  <option key={x.id} value={x.id}>{x.nombre || 'Sin nombre'} {x.fuente ? `· ${x.fuente}` : ''}</option>
+                ))}
+              </select>
+              {fusionId && (() => {
+                const origen = prospectos.find(x => x.id === fusionId);
+                if (!origen) return null;
+                return (
+                  <div style={{ fontSize: 12, color: T.tinta60, marginBottom: 12, background: '#fff', borderRadius: 8, padding: 12, border: `1px solid ${T.borde}` }}>
+                    <div><strong>{origen.nombre}</strong> · {origen.fuente} · {origen.estado}</div>
+                    {origen.nroDoc && <div>Doc: {origen.nroDoc}</div>}
+                    {(origen.polizasCartera || []).length > 0 && <div>{origen.polizasCartera.length} póliza(s) de cartera</div>}
+                    {(origen.historial || []).length > 0 && <div>{origen.historial.length} entrada(s) de historial</div>}
+                    {(origen.cierres || []).length > 0 && <div>{origen.cierres.length} cierre(s)</div>}
+                  </div>
+                );
+              })()}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  style={{ ...S.btnPrimary, background: fusionId ? T.dorado : T.tinta40, cursor: fusionId ? 'pointer' : 'not-allowed' }}
+                  disabled={!fusionId}
+                  onClick={() => {
+                    const origen = prospectos.find(x => x.id === fusionId);
+                    if (!origen) return;
+                    // Combinar datos: pólizas, historial, cierres, notas, contacto
+                    const polizasOrigen = origen.polizasCartera || [];
+                    const polizasActuales = p.polizasCartera || [];
+                    const nrosActuales = new Set(polizasActuales.map(pp => pp.nroPoliza));
+                    const polizasNuevas = polizasOrigen.filter(pp => !nrosActuales.has(pp.nroPoliza));
+
+                    const historialCombinado = [
+                      ...(p.historial || []),
+                      ...(origen.historial || []),
+                    ].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+
+                    const cierresCombinados = [...(p.cierres || []), ...(origen.cierres || [])];
+
+                    onUpdate({
+                      polizasCartera: [...polizasActuales, ...polizasNuevas],
+                      historial: historialCombinado,
+                      cierres: cierresCombinados,
+                      nroDoc: p.nroDoc || origen.nroDoc,
+                      telefonos: (p.telefonos || []).length > 0 ? p.telefonos : (origen.telefonos || []),
+                      mail: p.mail || origen.mail,
+                      fechaNacimiento: p.fechaNacimiento || origen.fechaNacimiento,
+                      notas: [p.notas, origen.notas].filter(Boolean).join(' | '),
+                      contextPersonal: [p.contextPersonal, origen.contextPersonal].filter(Boolean).join('
+
+'),
+                    });
+                    if (onEliminar) onEliminar(origen.id);
+                    setMostrarFusion(false);
+                    setFusionId('');
+                  }}
+                >
+                  Confirmar fusión
+                </button>
+                <button style={S.btnGhost} onClick={() => { setMostrarFusion(false); setFusionId(''); }}>Cancelar</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Eliminar ficha */}
+        <div>
+          <div style={{ fontSize: 13, color: T.tinta60, marginBottom: 10 }}>
+            <strong>Eliminar esta ficha</strong> — acción irreversible. Se borran todos los datos del prospecto.
+          </div>
+          {!confirmarEliminar ? (
+            <button style={{ ...S.btnGhost, borderColor: T.terracota, color: T.terracota }} onClick={() => setConfirmarEliminar(true)}>
+              Eliminar ficha
+            </button>
+          ) : (
+            <div style={{ background: `${T.terracota}10`, border: `1px solid ${T.terracota}40`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 13, color: T.terracota, marginBottom: 12 }}>
+                ¿Segura? Esta acción no se puede deshacer. Se va a eliminar la ficha de <strong>{p.nombre}</strong> permanentemente.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  style={{ ...S.btnPrimary, background: T.terracota }}
+                  onClick={() => { if (onEliminar) { onEliminar(p.id); onVolver(); } }}
+                >
+                  Sí, eliminar
+                </button>
+                <button style={S.btnGhost} onClick={() => setConfirmarEliminar(false)}>Cancelar</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
