@@ -357,11 +357,11 @@ export default function Dashboard({ prospectos }) {
                 {objMes.prima && (
                   <div style={{ marginTop: 12 }}>
                     <div style={{ height: 8, background: T.papel2, borderRadius: 5, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 5, background: primaAnualMes >= Number(objMes.prima) ? '#2D5016' : T.dorado, width: `${Math.min(100, (primaAnualMes / Number(objMes.prima)) * 100)}%`, transition: 'width 0.4s' }} />
+                      <div style={{ height: '100%', borderRadius: 5, background: primaVidaMes >= Number(objMes.prima) ? '#2D5016' : T.dorado, width: `${Math.min(100, (primaVidaMes / Number(objMes.prima)) * 100)}%`, transition: 'width 0.4s' }} />
                     </div>
                     <div style={{ fontSize: 12, color: T.tinta40, marginTop: 4 }}>
-                      {fmtPct((primaAnualMes / Number(objMes.prima)) * 100)} del objetivo mensual
-                      {primaAnualMes < Number(objMes.prima) && ` · Faltan ${fmtUSD(Number(objMes.prima) - primaAnualMes)}`}
+                      {fmtPct((primaVidaMes / Number(objMes.prima)) * 100)} del objetivo mensual
+                      {primaVidaMes < Number(objMes.prima) && ` · Faltan ${fmtUSD(Number(objMes.prima) - primaVidaMes)}`}
                     </div>
                   </div>
                 )}
