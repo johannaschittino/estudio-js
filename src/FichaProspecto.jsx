@@ -255,6 +255,7 @@ export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrA
             </div>
           )}
         </div>
+          </details>
         </div>
       </div>
     </div>
