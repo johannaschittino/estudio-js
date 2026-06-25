@@ -241,6 +241,9 @@ export function procesarImportacionCartera(filas, prospectoExistentes) {
   const resultados = { nuevos: [], actualizados: [], total: 0 };
 
   for (const [key, grupo] of Object.entries(grupos)) {
+    const tomadorFormateado = formatearNombre(grupo.tomadorRaw);
+    const aseguradoFormateado = formatearNombre(grupo.aseguradoRaw) || tomadorFormateado;
+
     const polizas = grupo.filas.map((f) => ({
       id: uid(),
       nroPoliza: f.nroPoliza,
@@ -250,18 +253,19 @@ export function procesarImportacionCartera(filas, prospectoExistentes) {
       moneda: f.moneda,
       fechaVigencia: f.fechaVigencia,
       estado: f.estado,
-      asegurado: formatearNombre(f.aseguradoRaw),
+      tomador: tomadorFormateado,
+      asegurado: aseguradoFormateado,
       suplementos: f.suplementos,
     }));
 
     const telefonos = [grupo.tel1, grupo.tel2, grupo.tel3].filter(Boolean);
-    const nombreFormateado = formatearNombre(grupo.tomadorRaw);
     const fechaNac = excelFechaAISO(grupo.fechaNacRaw);
 
-    // Buscar si ya existe por nroDoc o por nombre similar
+    // Buscar si ya existe por nroDoc, nombre de asegurado o nombre de tomador
     const existente = prospectoExistentes.find((p) =>
       (grupo.nroDoc && p.nroDoc === grupo.nroDoc) ||
-      (!grupo.nroDoc && p.nombre && p.nombre.toLowerCase() === nombreFormateado.toLowerCase())
+      (p.nombre && p.nombre.toLowerCase() === aseguradoFormateado.toLowerCase()) ||
+      (p.nombre && p.nombre.toLowerCase() === tomadorFormateado.toLowerCase())
     );
 
     if (existente) {
@@ -279,10 +283,10 @@ export function procesarImportacionCartera(filas, prospectoExistentes) {
         fechaNacimiento: fechaNac || existente.fechaNacimiento,
       });
     } else {
-      // Crear prospecto nuevo
+      // Crear prospecto nuevo — nombre = asegurado
       resultados.nuevos.push({
         ...nuevoProspecto(),
-        nombre: nombreFormateado,
+        nombre: aseguradoFormateado,
         fuente: 'Cartera',
         estado: 'sin_contactar',
         nroDoc: grupo.nroDoc,
