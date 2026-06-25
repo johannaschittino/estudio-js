@@ -589,26 +589,50 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
       {(p.polizasCartera || []).length > 0 && (
         <div style={S.seccion}>
           <h3 style={S.seccionTitulo}>Pólizas en cartera</h3>
-          <p style={{ fontSize: 12, color: T.tinta40, margin: '-8px 0 12px' }}>Importadas desde el reporte de Life Seguros. Solo lectura.</p>
-          {(p.polizasCartera || []).map((pol) => (
-            <div key={pol.id || pol.nroPoliza} style={{ borderBottom: `1px solid ${T.borde}`, padding: '10px 0', fontSize: 13 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                <div>
-                  <span style={{ fontFamily: 'monospace', fontSize: 12, color: T.tinta40, marginRight: 8 }}>#{pol.nroPoliza}</span>
-                  <span style={{ fontWeight: 600 }}>{pol.descripcionPlan}</span>
+          <p style={{ fontSize: 12, color: T.tinta40, margin: '-8px 0 12px' }}>Importadas desde el reporte de Life Seguros. Podés actualizar el estado manualmente.</p>
+          {(p.polizasCartera || []).map((pol) => {
+            const estadoColor = (pol.estado || '').toLowerCase().includes('vigente') ? T.sage
+              : (pol.estado || '').toLowerCase().includes('cancelad') ? T.terracota
+              : (pol.estado || '').toLowerCase().includes('lapsead') ? T.dorado
+              : T.tinta40;
+            return (
+              <div key={pol.id || pol.nroPoliza} style={{ borderBottom: `1px solid ${T.borde}`, padding: '10px 0', fontSize: 13 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontFamily: 'monospace', fontSize: 12, color: T.tinta40, marginRight: 8 }}>#{pol.nroPoliza}</span>
+                    <span style={{ fontWeight: 600 }}>{pol.descripcionPlan}</span>
+                  </div>
+                  <select
+                    value={pol.estado || ''}
+                    onChange={(e) => {
+                      const nuevasPolizas = (p.polizasCartera || []).map(pp =>
+                        (pp.id || pp.nroPoliza) === (pol.id || pol.nroPoliza)
+                          ? { ...pp, estado: e.target.value }
+                          : pp
+                      );
+                      onUpdate({ polizasCartera: nuevasPolizas });
+                    }}
+                    style={{ fontSize: 11.5, fontWeight: 600, color: estadoColor, border: `1px solid ${estadoColor}`, borderRadius: 5, padding: '2px 6px', background: '#fff', cursor: 'pointer' }}
+                  >
+                    <option value="Vigente">Vigente</option>
+                    <option value="Cancelada">Cancelada</option>
+                    <option value="Lapseada">Lapseada</option>
+                    <option value="Suspendida">Suspendida</option>
+                    <option value="Vencida">Vencida</option>
+                    <option value={pol.estado || ''}>{pol.estado || 'Sin estado'}</option>
+                  </select>
                 </div>
-                <span style={{ fontSize: 11.5, fontWeight: 600, color: pol.estado === 'Vigente' ? T.sage : pol.estado === 'Cancelada' ? T.terracota : T.tinta40 }}>{pol.estado}</span>
+                <div style={{ display: 'flex', gap: 16, fontSize: 12, color: T.tinta60 }}>
+                  <span>SA: {pol.moneda === 'ARS' ? '$' : 'USD '}${Number(pol.sumaAseg).toLocaleString('es-AR')}</span>
+                  <span>Prima: {pol.moneda === 'ARS' ? '$' : 'USD '}${Number(pol.primaAnual).toLocaleString('es-AR')}/año</span>
+                  {pol.fechaVigencia && <span>Desde {pol.fechaVigencia}</span>}
+                </div>
+                {pol.suplementos?.length > 0 && (
+                  <div style={{ fontSize: 11, color: T.tinta40, marginTop: 3 }}>{pol.suplementos.join(' · ')}</div>
+                )}
               </div>
-              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: T.tinta60 }}>
-                <span>SA: {pol.moneda === 'ARS' ? '$' : 'USD '}${Number(pol.sumaAseg).toLocaleString('es-AR')}</span>
-                <span>Prima: {pol.moneda === 'ARS' ? '$' : 'USD '}${Number(pol.primaAnual).toLocaleString('es-AR')}/año</span>
-                {pol.fechaVigencia && <span>Desde {pol.fechaVigencia}</span>}
-              </div>
-              {pol.suplementos?.length > 0 && (
-                <div style={{ fontSize: 11, color: T.tinta40, marginTop: 3 }}>{pol.suplementos.join(' · ')}</div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
