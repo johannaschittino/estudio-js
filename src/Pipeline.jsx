@@ -166,6 +166,7 @@ export default function Pipeline({ prospectos, onAbrir, onCreate, onUpdate, onEl
               telefonos: p.telefonos,
               mail: p.mail,
               fechaNacimiento: p.fechaNacimiento,
+              nombre: p.nombre, // actualizar al nombre del asegurado
             });
           });
           setImportResult(resultado);
