@@ -288,7 +288,13 @@ export default function Dashboard({ prospectos }) {
           </div>
 
           {/* Métricas discriminadas por tipo */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }}>
+            {/* Vida */}
+            <div style={S.metricaCard}>
+              <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Pólizas de vida</div>
+              <div style={{ fontFamily: T.serif, fontSize: 24, fontWeight: 700, color: T.tinta }}>{cantVida}</div>
+              <div style={{ fontSize: 12, color: T.tinta60, marginTop: 4 }}>Prima anual: {fmtUSD(primaVidaAnual)}</div>
+            </div>
             {/* Endosos */}
             <div style={S.metricaCard}>
               <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Endosos</div>
@@ -297,13 +303,13 @@ export default function Dashboard({ prospectos }) {
             </div>
             {/* Retiro */}
             <div style={S.metricaCard}>
-              <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Retiro</div>
+              <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Pólizas de retiro</div>
               <div style={{ fontFamily: T.serif, fontSize: 24, fontWeight: 700, color: T.tinta }}>{cantRetiro}</div>
               <div style={{ fontSize: 12, color: T.tinta60, marginTop: 4 }}>Prima mensual: {fmtUSD(primaRetiroMensual)}/mes</div>
             </div>
             {/* Salud */}
             <div style={S.metricaCard}>
-              <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Salud</div>
+              <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Pólizas de salud</div>
               <div style={{ fontFamily: T.serif, fontSize: 24, fontWeight: 700, color: T.tinta }}>{cantSalud}</div>
               <div style={{ fontSize: 12, color: T.tinta60, marginTop: 4 }}>Prima mensual: {fmtUSD(primaSaludMensual)}/mes</div>
             </div>
