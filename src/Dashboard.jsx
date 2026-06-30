@@ -121,9 +121,11 @@ export default function Dashboard({ prospectos }) {
   );
   const cerradosMes = cerrados.filter(p => opsDe(p).some(op => (op.fechaEmision || '').startsWith(mesKey)));
   const primaVidaMes = opsMes('poliza_nueva').reduce((s, op) => s + (Number(op.primaMensualUSD) || 0) * 12, 0);
+  const polizasVidaMes = opsMes('poliza_nueva').length;
   const endososMes = opsMes('endoso').length;
   const retiroMes = opsMes('retiro').length;
   const saludMes = opsMes('salud').length;
+  const totalPolizasMes = polizasVidaMes + endososMes + retiroMes + saludMes;
   const clientesNuevosMes = opsMes(null).filter(op => op.clienteNuevo).length;
 
   const hoy = new Date().toISOString().slice(0, 10);
@@ -348,8 +350,12 @@ export default function Dashboard({ prospectos }) {
             ) : (
               <>
                 <div style={S.grid4}>
+                  <Metrica label="Pólizas de vida" valor={polizasVidaMes} sub="nuevas este mes" />
                   <Metrica label="Prima vida anualizada" valor={fmtUSD(primaVidaMes)} sub={objMes.prima ? `meta: ${fmtUSD(Number(objMes.prima))}` : ''} color={objMes.prima && primaVidaMes >= Number(objMes.prima) ? '#2D5016' : T.dorado} />
                   <Metrica label="Endosos" valor={endososMes} sub={objMes.endosos ? `meta: ${objMes.endosos}` : ''} color={objMes.endosos && endososMes >= Number(objMes.endosos) ? '#2D5016' : T.tinta} />
+                  <Metrica label="Total pólizas" valor={totalPolizasMes} sub="vida + endosos + retiro + salud" />
+                </div>
+                <div style={S.grid4}>
                   <Metrica label="Retiro" valor={retiroMes} sub={objMes.retiro ? `meta: ${objMes.retiro}` : ''} color={objMes.retiro && retiroMes >= Number(objMes.retiro) ? '#2D5016' : T.tinta} />
                   <Metrica label="Salud" valor={saludMes} sub={objMes.salud ? `meta: ${objMes.salud}` : ''} color={objMes.salud && saludMes >= Number(objMes.salud) ? '#2D5016' : T.tinta} />
                   <Metrica label="Clientes nuevos" valor={clientesNuevosMes} sub={objMes.clientesNuevos ? `meta: ${objMes.clientesNuevos}` : ''} />
