@@ -40,6 +40,36 @@ function mesLabel(key) {
   return `${meses[parseInt(m) - 1]} ${y}`;
 }
 
+// Rango "año Life" por defecto: del 1 de julio del año vigente al 30 de junio del siguiente.
+// Si hoy es antes de julio, el rango arrancó en julio del año pasado.
+function rangoAnualPorDefecto() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const anioInicio = now.getMonth() >= 6 ? y : y - 1; // mes 6 = julio (0-indexed)
+  const desde = `${anioInicio}-07`;
+  const hasta = `${anioInicio + 1}-06`;
+  return { desde, hasta };
+}
+
+function cargarRangoAnual() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem('estudio_rango_anual') || 'null');
+    if (guardado && guardado.desde && guardado.hasta) return guardado;
+  } catch {}
+  return rangoAnualPorDefecto();
+}
+
+function guardarRangoAnual(rango) {
+  localStorage.setItem('estudio_rango_anual', JSON.stringify(rango));
+}
+
+// ¿Una fechaEmision (YYYY-MM-DD) cae dentro de un rango de meses [desde, hasta] inclusive?
+function enRangoMeses(fechaEmision, desde, hasta) {
+  if (!fechaEmision) return false;
+  const mesOp = fechaEmision.slice(0, 7); // "YYYY-MM"
+  return mesOp >= desde && mesOp <= hasta;
+}
+
 // Storage para incentivos y objetivos mensuales (localStorage)
 function cargarIncentivos() {
   try { return JSON.parse(localStorage.getItem('estudio_incentivos') || '[]'); } catch { return []; }
@@ -60,6 +90,13 @@ export default function Dashboard({ prospectos }) {
   const [editIncentivo, setEditIncentivo] = useState(null);
   const mesKey = mesActualKey();
   const [objMes, setObjMes] = useState(() => cargarObjetivosMes(mesKey));
+  const [rangoAnual, setRangoAnual] = useState(cargarRangoAnual);
+
+  const actualizarRango = (campo, valor) => {
+    const nuevo = { ...rangoAnual, [campo]: valor };
+    setRangoAnual(nuevo);
+    guardarRangoAnual(nuevo);
+  };
 
   const guardarObjMes = (newObj) => {
     setObjMes(newObj);
@@ -82,8 +119,9 @@ export default function Dashboard({ prospectos }) {
   // Helper: todas las operaciones de cierre de un prospecto
   const opsDe = (p) => p.cierres || (p.cierre?.primaMensualUSD ? [{ ...p.cierre, tipo: p.cierre.tipoOperacion || 'poliza_nueva' }] : []);
 
-  // Todas las operaciones de todos los cerrados
-  const todasOps = cerrados.flatMap(p => opsDe(p));
+  // Todas las operaciones de todos los cerrados, filtradas por el rango "año Life" elegido
+  const todasOpsHistorico = cerrados.flatMap(p => opsDe(p));
+  const todasOps = todasOpsHistorico.filter(op => enRangoMeses(op.fechaEmision, rangoAnual.desde, rangoAnual.hasta));
 
   // ── VIDA ── prima anualizada (mensual × 12), tiene objetivo
   const opsVida = todasOps.filter(op => op.tipo === 'poliza_nueva');
@@ -179,6 +217,23 @@ export default function Dashboard({ prospectos }) {
       {/* ===== ANUAL ===== */}
       {tabDash === 'anual' && (
         <>
+          {/* Selector de rango — "año Life" libre, no calendario fijo */}
+          <div style={{ background: '#fff', border: `1px solid ${T.borde}`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: T.tinta60, textTransform: 'uppercase', letterSpacing: 0.4 }}>Período</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <SelectorMesAnio value={rangoAnual.desde} onChange={(v) => actualizarRango('desde', v)} />
+              <span style={{ color: T.tinta40, fontSize: 13 }}>→</span>
+              <SelectorMesAnio value={rangoAnual.hasta} onChange={(v) => actualizarRango('hasta', v)} />
+            </div>
+            <button
+              style={{ ...S.btnMini, marginLeft: 'auto' }}
+              onClick={() => { const def = rangoAnualPorDefecto(); setRangoAnual(def); guardarRangoAnual(def); }}
+              title="Restablecer al año Life vigente (julio a junio)"
+            >
+              Restablecer
+            </button>
+          </div>
+
           {/* Resumen general */}
           <div style={S.grid4}>
             <Metrica label="Total registros" valor={total} sub={`${deCartera.length} cartera · ${prospectosPuros.length} prospectos`} />
@@ -220,7 +275,7 @@ export default function Dashboard({ prospectos }) {
           <div style={S.cardWide}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10 }}>
               <div>
-                <div style={{ fontSize: 11, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Prima vida anualizada · meta {fmtUSD(META_ANUAL_USD)}</div>
+                <div style={{ fontSize: 11, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Prima vida anualizada · {mesLabel(rangoAnual.desde)} a {mesLabel(rangoAnual.hasta)} · meta {fmtUSD(META_ANUAL_USD)}</div>
                 <div style={{ fontFamily: T.serif, fontSize: 22, fontWeight: 700 }}>{fmtUSD(primaVidaAnual)}</div>
                 <div style={{ fontSize: 12, color: T.tinta40, marginTop: 3 }}>{cantVida} póliza{cantVida !== 1 ? 's' : ''} · promedio {fmtUSD(primaVidaAnualPromedio)}/año</div>
               </div>
@@ -396,6 +451,19 @@ export default function Dashboard({ prospectos }) {
       {/* ===== INCENTIVOS ===== */}
       {tabDash === 'incentivos' && (
         <>
+          {/* Selector de rango — comparte el mismo rango que la pestaña Anual */}
+          <div style={{ background: '#fff', border: `1px solid ${T.borde}`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: T.tinta60, textTransform: 'uppercase', letterSpacing: 0.4 }}>Producción tomada en cuenta</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <SelectorMesAnio value={rangoAnual.desde} onChange={(v) => actualizarRango('desde', v)} />
+              <span style={{ color: T.tinta40, fontSize: 13 }}>→</span>
+              <SelectorMesAnio value={rangoAnual.hasta} onChange={(v) => actualizarRango('hasta', v)} />
+            </div>
+            <span style={{ fontSize: 12, color: T.tinta40, marginLeft: 'auto' }}>
+              {mesLabel(rangoAnual.desde)} a {mesLabel(rangoAnual.hasta)}
+            </span>
+          </div>
+
           {/* CAV fija */}
           <IncentivoBloqueCAV cerrados={cerrados} polizasVida={cantVida} endosos={cantEndosos} polizasRetiro={cantRetiro} polizasSalud={cantSalud} clientesNuevos={clientesNuevos} primaAnualTotal={primaVidaAnual} />
 
@@ -611,6 +679,28 @@ function Metrica({ label, valor, sub, color }) {
       <div style={{ fontSize: 10.5, color: T.tinta40, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>{label}</div>
       <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: color || T.tinta, lineHeight: 1 }}>{valor}</div>
       {sub && <div style={{ fontSize: 11, color: T.tinta40, marginTop: 3 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// Selector de mes + año, value y onChange en formato "YYYY-MM"
+function SelectorMesAnio({ value, onChange }) {
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const [y, m] = (value || '').split('-');
+  const anioActual = new Date().getFullYear();
+  const anios = [];
+  for (let a = anioActual - 3; a <= anioActual + 1; a++) anios.push(a);
+
+  const selStyle = { fontSize: 13, border: `1px solid ${T.borde}`, borderRadius: 6, padding: '5px 8px', background: '#fff', color: T.tinta, cursor: 'pointer' };
+
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      <select style={selStyle} value={parseInt(m) || 1} onChange={(e) => onChange(`${y}-${String(e.target.value).padStart(2, '0')}`)}>
+        {meses.map((mLabel, i) => <option key={i} value={i + 1}>{mLabel}</option>)}
+      </select>
+      <select style={selStyle} value={y} onChange={(e) => onChange(`${e.target.value}-${m}`)}>
+        {anios.map((a) => <option key={a} value={a}>{a}</option>)}
+      </select>
     </div>
   );
 }
