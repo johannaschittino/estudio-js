@@ -10,6 +10,7 @@ import Login from './Login.jsx';
 import Pipeline from './Pipeline.jsx';
 import FichaProspecto from './FichaProspecto.jsx';
 import Dashboard from './Dashboard.jsx';
+import Cartera from './Cartera.jsx';
 
 /* ============================================================
    UTILIDADES COMPARTIDAS (usadas en PanelAnalisis)
@@ -212,7 +213,7 @@ function EstudioApp({ user }) {
       {/* Top bar */}
       <header style={SApp.topbar}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {(vista === 'pipeline' || vista === 'dashboard') && (
+          {(vista === 'pipeline' || vista === 'dashboard' || vista === 'cartera') && (
             <button onClick={() => { setVista('pipeline'); setActivoId(null); }} style={SApp.iconBtn}>
               <Icon name="back" size={17} />
             </button>
@@ -224,7 +225,7 @@ function EstudioApp({ user }) {
           )}
           <span style={SApp.brandMark}>Estudio</span>
           {/* Navegación principal — solo visible en pipeline y dashboard */}
-          {(vista === 'pipeline' || vista === 'dashboard') && (
+          {(vista === 'pipeline' || vista === 'dashboard' || vista === 'cartera') && (
             <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
               <button
                 onClick={() => setVista('pipeline')}
@@ -237,6 +238,12 @@ function EstudioApp({ user }) {
                 style={{ ...SApp.navBtn, ...(vista === 'dashboard' ? SApp.navBtnActivo : {}) }}
               >
                 Dashboard
+              </button>
+              <button
+                onClick={() => setVista('cartera')}
+                style={{ ...SApp.navBtn, ...(vista === 'cartera' ? SApp.navBtnActivo : {}) }}
+              >
+                Cartera
               </button>
             </div>
           )}
@@ -275,9 +282,12 @@ function EstudioApp({ user }) {
       </header>
 
       {/* Contenido */}
-      <div style={{ ...SApp.body, overflowY: (vista === 'analisis' || vista === 'dashboard') ? 'auto' : 'hidden' }}>
+      <div style={{ ...SApp.body, overflowY: (vista === 'analisis' || vista === 'dashboard' || vista === 'cartera') ? 'auto' : 'hidden' }}>
         {vista === 'dashboard' && (
           <Dashboard prospectos={prospectos} />
+        )}
+        {vista === 'cartera' && (
+          <Cartera prospectos={prospectos} />
         )}
         {vista === 'pipeline' && (
           <Pipeline
@@ -307,6 +317,33 @@ function EstudioApp({ user }) {
               }];
               persistir(activo.id, { vinculados: vinculadosActualizados, grupoFamiliarId: activo.grupoFamiliarId || activo.id });
               crearProspecto(nuevo);
+            }}
+            onVincularConyuge={(idActual, idOtro) => {
+              const otro = prospectos.find((x) => x.id === idOtro);
+              const actual = prospectos.find((x) => x.id === idActual);
+              if (!otro || !actual) return;
+              const grupoId = actual.grupoFamiliarId || otro.grupoFamiliarId || actual.id;
+
+              // Vincular ambas fichas entre sí, sin pisar otros vínculos existentes
+              const vinculadosActual = [
+                ...(actual.vinculados || []).filter((v) => v.id !== otro.id),
+                { id: otro.id, relacion: 'cónyuge', nombre: otro.nombre },
+              ];
+              const vinculadosOtro = [
+                ...(otro.vinculados || []).filter((v) => v.id !== actual.id),
+                { id: actual.id, relacion: 'cónyuge', nombre: actual.nombre },
+              ];
+
+              persistir(actual.id, {
+                vinculados: vinculadosActual,
+                grupoFamiliarId: grupoId,
+                conyuge: { nombre: otro.nombre, edad: actual.conyuge?.edad || '', ocupacion: otro.rol || actual.conyuge?.ocupacion || '' },
+              });
+              persistir(otro.id, {
+                vinculados: vinculadosOtro,
+                grupoFamiliarId: grupoId,
+                conyuge: { nombre: actual.nombre, edad: otro.conyuge?.edad || '', ocupacion: actual.rol || otro.conyuge?.ocupacion || '' },
+              });
             }}
           />
         )}
