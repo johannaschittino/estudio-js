@@ -67,6 +67,25 @@ export default function Pipeline({ prospectos, onAbrir, onCreate, onUpdate, onEl
     return diff >= 0 && diff <= 7;
   });
 
+  // Aniversarios de pólizas próximos (7 días) — fecha de vigencia
+  const aniversariosPolizas = [];
+  prospectos.forEach((p) => {
+    (p.polizasCartera || []).forEach((pol) => {
+      if (!pol.fechaVigencia || pol.estado !== 'Vigente') return;
+      const hoyDate = new Date();
+      const vig = new Date(pol.fechaVigencia + 'T00:00:00');
+      if (isNaN(vig.getTime())) return;
+      const aniversario = new Date(hoyDate.getFullYear(), vig.getMonth(), vig.getDate());
+      if (aniversario < hoyDate) aniversario.setFullYear(hoyDate.getFullYear() + 1);
+      const diff = (aniversario - hoyDate) / (1000 * 60 * 60 * 24);
+      if (diff >= 0 && diff <= 7) {
+        const años = hoyDate.getFullYear() - vig.getFullYear() + (aniversario.getFullYear() > hoyDate.getFullYear() ? 1 : 0);
+        aniversariosPolizas.push({ prospecto: p, poliza: pol, diff: Math.round(diff), años });
+      }
+    });
+  });
+  aniversariosPolizas.sort((a, b) => a.diff - b.diff);
+
   // Fuentes únicas para el filtro
   const fuentesUnicas = [...new Set(prospectos.map((p) => p.fuente).filter(Boolean))].sort();
 
@@ -273,6 +292,18 @@ export default function Pipeline({ prospectos, onAbrir, onCreate, onUpdate, onEl
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Aniversarios de pólizas */}
+      {tab === 'pipeline' && aniversariosPolizas.length > 0 && (
+        <div style={{ background: 'rgba(91,143,168,0.1)', borderBottom: `1px solid rgba(91,143,168,0.3)`, padding: '8px 20px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: '#5B8FA8' }}>📅 Aniversario póliza</span>
+          {aniversariosPolizas.map(({ prospecto: p, poliza: pol, diff, años }) => (
+            <button key={pol.id || pol.nroPoliza} onClick={() => onAbrir(p.id)} style={{ background: '#fff', border: `1px solid #5B8FA8`, borderRadius: 7, padding: '3px 10px', fontSize: 12, cursor: 'pointer', color: T.tinta }}>
+              <strong>{p.nombre}</strong> <span style={{ color: T.tinta40 }}>#{pol.nroPoliza} · {diff === 0 ? `¡hoy!` : `en ${diff}d`} · {años} año{años !== 1 ? 's' : ''}</span>
+            </button>
+          ))}
         </div>
       )}
 
