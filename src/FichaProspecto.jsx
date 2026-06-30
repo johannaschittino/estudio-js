@@ -38,7 +38,7 @@ const TIPOS_CONTACTO = [
   { value: 'nota', label: 'Nota interna' },
 ];
 
-export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrAnalisis, onCrearDesde, onEliminar, prospectos = [] }) {
+export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrAnalisis, onCrearDesde, onEliminar, onVincularConyuge, prospectos = [] }) {
   const [tab, setTab] = useState('seguimiento');
   const [nuevoContacto, setNuevoContacto] = useState({ tipo: 'llamada', texto: '', fecha: todayISO() });
   const [mostrarFormContacto, setMostrarFormContacto] = useState(false);
@@ -138,7 +138,7 @@ export default function FichaProspecto({ prospecto: p, onUpdate, onVolver, onIrA
           />
         )}
         {tab === 'datos' && (
-          <TabDatos p={p} onUpdate={onUpdate} onCrearDesde={onCrearDesde} prospectos={prospectos} />
+          <TabDatos p={p} onUpdate={onUpdate} onCrearDesde={onCrearDesde} onVincularConyuge={onVincularConyuge} prospectos={prospectos} />
         )}
       </div>
 
@@ -378,7 +378,9 @@ function TabSeguimiento({ p, set, nuevoContacto, setNuevoContacto, mostrarFormCo
    TAB: DATOS
    ============================================================ */
 
-function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
+function TabDatos({ p, onUpdate, onCrearDesde, onVincularConyuge, prospectos = [] }) {
+  const [mostrarVincular, setMostrarVincular] = useState(false);
+  const [vincularId, setVincularId] = useState('');
   const set = (field, value) => onUpdate({ [field]: value });
   const setFinanzas = (field, value) => onUpdate({ finanzas: { ...p.finanzas, [field]: value } });
   const setTipoCambio = (field, value) => onUpdate({ tipoCambio: { ...p.tipoCambio, [field]: value } });
@@ -461,6 +463,10 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
                     rol: p.conyuge.ocupacion || '',
                     vinculados: [{ id: p.id, relacion: 'cónyuge', nombre: p.nombre }],
                     grupoFamiliarId: p.grupoFamiliarId || p.id,
+                    // Datos heredados del grupo familiar — se pueden editar después
+                    vivienda: p.vivienda || '',
+                    contextPersonal: p.contextPersonal || '',
+                    conyuge: { nombre: p.nombre, edad: '', ocupacion: p.rol || '' },
                   })}
                   title="Crear ficha propia para el cónyuge"
                 >
@@ -471,8 +477,40 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
                 ? <button style={S.btnMini} onClick={() => onUpdate({ conyuge: { nombre: '', edad: '', ocupacion: '' } })}>+ Agregar</button>
                 : <button style={S.btnMini} onClick={() => onUpdate({ conyuge: null })}>Quitar</button>
               }
+              {onVincularConyuge && (
+                <button style={{ ...S.btnMini, color: T.dorado, borderColor: T.dorado }} onClick={() => setMostrarVincular(!mostrarVincular)}>
+                  🔗 Vincular ficha existente
+                </button>
+              )}
             </div>
           </div>
+          {mostrarVincular && (
+            <div style={{ background: T.papel2, borderRadius: 9, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: T.tinta60, marginBottom: 8 }}>
+                Elegí la ficha de su cónyuge. Se va a vincular como grupo familiar — los datos de cada uno se mantienen, solo se conectan.
+              </div>
+              <select style={{ ...S.input, marginBottom: 8 }} value={vincularId} onChange={(e) => setVincularId(e.target.value)}>
+                <option value="">— Elegir ficha —</option>
+                {prospectos.filter((x) => x.id !== p.id).map((x) => (
+                  <option key={x.id} value={x.id}>{x.nombre || 'Sin nombre'}</option>
+                ))}
+              </select>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  style={{ ...S.btnPrimary, background: vincularId ? T.dorado : T.tinta40, cursor: vincularId ? 'pointer' : 'not-allowed' }}
+                  disabled={!vincularId}
+                  onClick={() => {
+                    onVincularConyuge(p.id, vincularId);
+                    setMostrarVincular(false);
+                    setVincularId('');
+                  }}
+                >
+                  Confirmar vínculo
+                </button>
+                <button style={S.btnGhost} onClick={() => { setMostrarVincular(false); setVincularId(''); }}>Cancelar</button>
+              </div>
+            </div>
+          )}
           {p.conyuge && (
             <Grid cols={3}>
               <Campo label="Nombre"><input style={S.input} value={p.conyuge.nombre || ''} onChange={(e) => setConyuge('nombre', e.target.value)} /></Campo>
@@ -495,8 +533,12 @@ function TabDatos({ p, onUpdate, onCrearDesde, prospectos = [] }) {
                     style={{ ...S.btnMini, fontSize: 11, color: T.sage, borderColor: T.sage }}
                     onClick={() => onCrearDesde({
                       nombre: h.nombre || '',
+                      fechaNacimiento: h.fechaNacimiento || '',
                       vinculados: [{ id: p.id, relacion: 'padre/madre', nombre: p.nombre }],
                       grupoFamiliarId: p.grupoFamiliarId || p.id,
+                      // Datos heredados del grupo familiar
+                      vivienda: p.vivienda || '',
+                      contextPersonal: p.contextPersonal || '',
                     })}
                     title="Crear ficha propia para este hijo/a"
                   >
